@@ -9,7 +9,8 @@ const helmet = require("helmet");
 require("dotenv").config();
 const multer = require("multer");
 const path = require("path");
-require("dotenv").config();
+const axios = require("axios");
+
 
 const PORT = process.env.PORT || 5000;
 const CLIENT_URL = process.env.VITE_APP_CLIENT_URL || "http://localhost:5173";
@@ -82,22 +83,32 @@ app.use((req, res, next) => {
 const uploadsDir = path.join(__dirname, "uploads");
 app.use("/uploads", express.static(uploadsDir));
 
-const upload = multer({ dest: uploadsDir });
+
 
 // upload/image
 
-app.post("/upload/image", upload.single("image"), (req, res) => {
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
+
+app.post("/upload/image", upload.single("image"), async (req, res) => {
   try {
-    if (!req.file)
-      return res.status(400).send({ message: "No image uploaded." });
-    const fileUrl = `${SERVER_BASE_URL.replace(/\/$/, "")}/uploads/${
-      req.file.filename
-    }`;
-    console.log("✅ Image uploaded successfully:", fileUrl);
-    return res.status(201).send({ url: fileUrl });
+    if (!req.file) return res.status(400).send({ message: "No image uploaded." });
+
+    // ইমেজকে Base64 এ কনভার্ট করা
+    const imageBase64 = req.file.buffer.toString("base64");
+    const formData = new URLSearchParams();
+    formData.append("image", imageBase64);
+
+    // ImgBB API তে পাঠানো
+    const response = await axios.post(
+      `https://api.imgbb.com/1/upload?key=${process.env.IMGBB_API_KEY}`,
+      formData
+    );
+
+    return res.status(201).send({ url: response.data.data.url });
   } catch (error) {
-    console.error("Image upload failed:", error);
-    return res.status(500).send({ message: "Failed to upload image." });
+    console.error("Upload failed:", error.message);
+    return res.status(500).send({ message: "Failed to upload image to cloud." });
   }
 });
 
@@ -127,6 +138,49 @@ try {
 } catch (error) {
   console.error("Firebase Admin init failed:", error);
 }
+
+
+
+
+app.post(
+  "/webhook/payment",
+  express.raw({ type: "application/json" }),
+  async (req, res) => {
+    try {
+      const event = JSON.parse(req.body.toString());
+      if (
+        event.type === "checkout.session.completed" ||
+        event.status === "completed"
+      ) {
+        const paymentInfo = event.data.object;
+        const userUid = paymentInfo.metadata?.userId || paymentInfo.userId;
+        if (!userUid)
+          return res.status(400).send({ message: "Missing user ID." });
+
+        await usersCollection.updateOne(
+          { uid: userUid },
+          { $set: { isPremium: true, updatedAt: new Date() } }
+        );
+        await paymentsCollection.insertOne({
+          ...paymentInfo,
+          userId: userUid,
+          status: "completed",
+          isRefunded: false,
+          createdAt: new Date(),
+        });
+
+        console.log(`✅User ${userUid} upgraded to Premium.`);
+        return res.status(200).send({ received: true });
+      }
+    } catch (error) {
+      console.error("Webhook failed:", error);
+      return res.status(500).send({ message: "Webhook failed." });
+    }
+    res.status(200).send({ received: true });
+  }
+);
+
+
 
 // MongoDB connection
 
@@ -242,48 +296,7 @@ const verifyAdmin = async (req, res, next) => {
 
 // 1. User Registrations
 
-app.post("/users", async (req, res) => {
-  const user = req.body;
-  if (!user.uid || !user.email)
-    return res.status(400).send({ message: "Missing uid or email." });
 
-  const existingUser = await usersCollection.findOne({ uid: user.uid });
-  const now = new Date();
-
-  if (existingUser) {
-    await usersCollection.updateOne(
-      { uid: user.uid },
-      {
-        $set: {
-          lastLogin: now,
-          name: user.name,
-          photoURL: user.photoURL,
-          email: user.email,
-        },
-      }
-    );
-    return res
-      .status(200)
-      .send({ message: "User data synchronized.", user: existingUser });
-  }
-
-  const newUser = {
-    uid: user.uid,
-    email: user.email,
-    name: user.name || "Anonymous User",
-    photoURL: user.photoURL || "",
-    role: "user",
-    isPremium: false,
-    totalLessonsCreated: 0,
-    createdAt: now,
-    lastLogin: now,
-  };
-
-  const result = await usersCollection.insertOne(newUser);
-  res
-    .status(201)
-    .send({ message: "New user created.", insertedId: result.insertedId });
-});
 
 // 2. Check User Statues
 
@@ -392,56 +405,6 @@ app.post("/users", async (req, res) => {
     .send({ message: "New user created.", insertedId: result.insertedId });
 });
 
-// 2. Check User Status
-
-app.get("/users/status", verifyJWT, async (req, res) => {
-  try {
-    const uid = req.userUid;
-    console.log("📊 Fetching status for UID:", uid);
-
-    const user = await usersCollection.findOne(
-      { uid },
-      {
-        projection: {
-          role: 1,
-          isPremium: 1,
-          name: 1,
-          email: 1,
-          photoURL: 1,
-          upgradedAt: 1,
-          totalLessonsCreated: 1,
-        },
-      }
-    );
-
-    if (!user) {
-      console.warn("⚠️  User not found in DB for UID:", uid);
-      return res.status(404).send({ message: "User not found in DB." });
-    }
-
-    // Return normalized status object
-
-    const statusResponse = {
-      uid: user._id ? undefined : uid,
-      email: user.email,
-      name: user.name,
-      photoURL: user.photoURL || "",
-      isPremium: Boolean(user.isPremium),
-      role: user.role || "user",
-      upgradedAt: user.upgradedAt,
-      totalLessonsCreated: user.totalLessonsCreated || 0,
-    };
-
-    console.log(
-      "✅ User status retrieved. isPremium:",
-      statusResponse.isPremium
-    );
-    res.status(200).send(statusResponse);
-  } catch (error) {
-    console.error("❌ Failed to fetch user status:", error.message || error);
-    res.status(500).send({ message: "Failed to fetch user status." });
-  }
-});
 
 // Upgrade user to premium 
 
@@ -610,7 +573,7 @@ app.get("/lessons/public", async (req, res) => {
   try {
     const publicLessons = await lessonsCollection
       .find({
-        visibility: "Public",
+        visibility: "public",
         isReviewed: true,
       })
       .sort({ createdAt: -1 })
@@ -623,6 +586,7 @@ app.get("/lessons/public", async (req, res) => {
     res.status(500).send({ message: "Failed to fetch public lessons" });
   }
 });
+
 
 // 7. Create Lessons
 
@@ -859,54 +823,6 @@ app.post("/comments", verifyJWT, async (req, res) => {
 
 // 11. Toggle Favourites
 
-app.patch("/lessons/:id/toggle-favorite", verifyJWT, async (req, res) => {
-  const lessonId = req.params.id;
-
-  const uid = req.userUid;
-
-  if (!ObjectId.isValid(lessonId)) {
-    return res.status(400).send({ message: "Invalid Lesson ID." });
-  }
-
-  try {
-    const query = { userId: uid, lessonId: lessonId };
-    const existing = await favouritesCollection.findOne(query);
-
-    if (existing) {
-      await favouritesCollection.deleteOne({ _id: existing._id });
-
-      await lessonsCollection.updateOne(
-        { _id: new ObjectId(lessonId) },
-        { $inc: { favoritesCount: -1 } }
-      );
-
-      return res.send({
-        success: true,
-        message: "Removed from favorites",
-        isFavorite: false,
-      });
-    } else {
-      await favouritesCollection.insertOne({
-        ...query,
-        createdAt: new Date(),
-      });
-
-      await lessonsCollection.updateOne(
-        { _id: new ObjectId(lessonId) },
-        { $inc: { favoritesCount: 1 } }
-      );
-
-      return res.send({
-        success: true,
-        message: "Added to favorites",
-        isFavorite: true,
-      });
-    }
-  } catch (error) {
-    console.error("Toggle favorite failed:", error);
-    res.status(500).send({ message: "Internal Server Error" });
-  }
-});
 
 app.patch("/lessons/:id", verifyJWT, async (req, res) => {
   try {
@@ -951,60 +867,8 @@ app.get("/api/lessons/favorites/:uid", verifyJWT, async (req, res) => {
   }
 });
 
-app.post(
-  "/webhook/payment",
-  express.raw({ type: "application/json" }),
-  async (req, res) => {
-    try {
-      const event = JSON.parse(req.body.toString());
-      if (
-        event.type === "checkout.session.completed" ||
-        event.status === "completed"
-      ) {
-        const paymentInfo = event.data.object;
-        const userUid = paymentInfo.metadata?.userId || paymentInfo.userId;
-        if (!userUid)
-          return res.status(400).send({ message: "Missing user ID." });
 
-        await usersCollection.updateOne(
-          { uid: userUid },
-          { $set: { isPremium: true, updatedAt: new Date() } }
-        );
-        await paymentsCollection.insertOne({
-          ...paymentInfo,
-          userId: userUid,
-          status: "completed",
-          isRefunded: false,
-          createdAt: new Date(),
-        });
 
-        console.log(`✅User ${userUid} upgraded to Premium.`);
-        return res.status(200).send({ received: true });
-      }
-    } catch (error) {
-      console.error("Webhook failed:", error);
-      return res.status(500).send({ message: "Webhook failed." });
-    }
-    res.status(200).send({ received: true });
-  }
-);
-
-// ১. User Status API
-
-app.get("/users/status", async (req, res) => {
-  try {
-    const email = req.query.email;
-    if (!email) return res.status(400).send({ message: "Email is required" });
-
-    const user = await usersCollection.findOne({ email: email });
-    if (!user) {
-      return res.status(404).send({ message: "User not found in DB." });
-    }
-    res.send(user);
-  } catch (error) {
-    res.status(500).send({ message: "Server error" });
-  }
-});
 
 // ২. Manage Users
 
@@ -1186,7 +1050,7 @@ app.post("/lessons/:id/like", verifyJWT, async (req, res) => {
       return res.status(404).send({ message: "Lesson not found" });
     }
 
-    // আপনার কালেকশনে likedBy অ্যারে আছে কি না চেক করে নেওয়া
+  
     const likedBy = lesson.likedBy || [];
     const hasLiked = likedBy.includes(userEmail);
 
@@ -1319,4 +1183,11 @@ app.get("/", (req, res) =>
   res.send("✅ Digital Life Lessons Full API Running")
 );
 
-app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+// ✅ Vercel + Local both supported
+if (process.env.VERCEL !== "1") {
+  app.listen(PORT, () => {
+    console.log(`✅ Server running on port ${PORT}`);
+  });
+}
+
+module.exports = app;
