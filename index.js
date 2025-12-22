@@ -42,7 +42,7 @@ app.use((req, res, next) => {
 // CORS configuration
 const corsOptions = {
   origin: [
-    "https://digital-lifes-lesson.netlify.app", // আপনার Netlify লিঙ্ক
+    "https://digital-lifes-lesson.netlify.app", 
     "http://localhost:5173", 
     "http://localhost:5000"
   ],
@@ -53,9 +53,7 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-// অতিরিক্ত মিডলওয়্যারটি সরিয়ে ফেলুন যা আপনি res.header দিয়ে লিখেছিলেন। 
-// cors() প্যাকেজটি নিজেই এটি হ্যান্ডেল করবে।
-// Additional middleware to ensure CORS headers are sent for all responses including static files
+
 
 app.use((req, res, next) => {
   const origin = req.get("origin");
@@ -1188,6 +1186,37 @@ app.get("/lessons/my-lessons/:uid", verifyJWT, async (req, res) => {
     res.status(500).send({ message: "Failed to fetch user lessons." });
   }
 });
+
+
+// --- Lesson Delete (Soft Delete) Route ---
+
+app.patch("/lessons/delete-my-lesson/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+    // এখানে ObjectId এবং কালেকশন ব্যবহার করা হচ্ছে
+    const query = { _id: new ObjectId(id) };
+    
+    // ডাটাবেস থেকে ডিলিট না করে শুধুমাত্র একটি ফ্ল্যাগ সেট করা (নিরাপদ উপায়)
+    const updateDoc = {
+      $set: {
+        isDeletedByUser: true,
+        status: "deleted"
+      },
+    };
+
+    const result = await lessonsCollection.updateOne(query, updateDoc);
+
+    if (result.matchedCount === 0) {
+      return res.status(404).send({ message: "Lesson not found!" });
+    }
+
+    res.send({ success: true, message: "Lesson deleted successfully" });
+  } catch (error) {
+    console.error("Delete Error:", error);
+    res.status(500).send({ message: "Internal Server Error" });
+  }
+});
+
 
 // --- Listener & Root ---
 
