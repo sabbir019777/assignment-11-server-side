@@ -495,7 +495,7 @@ app.post("/users/upgrade", verifyJWT, async (req, res) => {
   }
 });
 
-// 3. Top Contributors (Weekly - Fixed & Safe)
+// 3. Top Contributors 
 
 app.get("/users/top-contributors", async (req, res) => {
   try {
