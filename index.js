@@ -624,7 +624,7 @@ app.get("/lessons/public", async (req, res) => {
   }
 });
 
-// 7. Create Lesson
+// 7. Create Lessons
 
 app.post("/lessons", verifyJWT, async (req, res) => {
   const user = await usersCollection.findOne({ uid: req.userUid });
