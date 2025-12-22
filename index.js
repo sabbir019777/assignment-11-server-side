@@ -1179,15 +1179,17 @@ app.get("/lessons/my-lessons/:uid", verifyJWT, async (req, res) => {
 
 // --- Listener & Root ---
 
+// একদম শেষে গিয়ে আগের module.expors লাইনটি মুছে এটি দিন
 app.get("/", (req, res) =>
   res.send("✅ Digital Life Lessons Full API Running")
 );
 
-// ✅ Vercel + Local both supported
-if (process.env.VERCEL !== "1") {
+// Vercel এর জন্য এক্সপোর্ট
+module.exports = app; 
+
+// লোকাল হোস্টে চালানোর জন্য
+if (process.env.NODE_ENV !== 'production') {
   app.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
   });
 }
-
-module.exports = app;
