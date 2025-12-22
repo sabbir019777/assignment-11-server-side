@@ -604,7 +604,7 @@ app.get("/lessons/most-saved", async (req, res) => {
   }
 });
 
-// 6. Public Lessons
+// 6. Public Lessonss
 
 app.get("/lessons/public", async (req, res) => {
   try {
