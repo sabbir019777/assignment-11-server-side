@@ -341,11 +341,11 @@ app.patch("/lessons/:id/toggle-favorite", verifyJWT, async (req, res) => {
     res.status(500).send({ message: "Server Error" });
   }
 });
-// --------------------
-// ROUTES
-// --------------------
 
-// 1. User Registration/Login (Upsert User Data)
+
+
+// ROUTES
+
 
 app.post("/users", async (req, res) => {
   const user = req.body;
