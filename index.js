@@ -309,7 +309,7 @@ app.get("/users/status", verifyJWT, async (req, res) => {
   }
 });
 
-// 11. Toggle Favourite (Fixed Logic)
+// 11. Toggle Favourite
 
 app.patch("/lessons/:id/toggle-favorite", verifyJWT, async (req, res) => {
   const lessonId = req.params.id;
