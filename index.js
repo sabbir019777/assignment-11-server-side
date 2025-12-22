@@ -239,11 +239,8 @@ const verifyAdmin = async (req, res, next) => {
     res.status(500).send({ message: "Internal Server Error" });
   }
 };
-// --------------------
-// ROUTES (Fixed & Optimized)
-// --------------------
 
-// 1. User Registration
+// 1. User Registrations
 
 app.post("/users", async (req, res) => {
   const user = req.body;
