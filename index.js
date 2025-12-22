@@ -166,7 +166,7 @@ async function connectDB() {
 connectDB();
 
 // --------------------
-// Middleware
+// Middlewares
 // --------------------
 
 const verifyJWT = async (req, res, next) => {
