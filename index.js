@@ -39,22 +39,22 @@ app.use((req, res, next) => {
 
 // CORS configuration
 
+// CORS configuration
 const corsOptions = {
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true);
-
-    if (origin === CLIENT_URL) return callback(null, true);
-
-    if (origin.match(/^http:\/\/localhost:\d+$/)) return callback(null, true);
-
-    callback(new Error("CORS not allowed"));
-  },
+  origin: [
+    "https://digital-lifes-lesson.netlify.app", // আপনার Netlify লিঙ্ক
+    "http://localhost:5173", 
+    "http://localhost:5000"
+  ],
   credentials: true,
   methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
 };
+
 app.use(cors(corsOptions));
 
+// অতিরিক্ত মিডলওয়্যারটি সরিয়ে ফেলুন যা আপনি res.header দিয়ে লিখেছিলেন। 
+// cors() প্যাকেজটি নিজেই এটি হ্যান্ডেল করবে।
 // Additional middleware to ensure CORS headers are sent for all responses including static files
 
 app.use((req, res, next) => {
