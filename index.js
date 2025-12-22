@@ -1006,7 +1006,7 @@ app.get("/users/status", async (req, res) => {
   }
 });
 
-// ২. Manage Users: All Users List
+// ২. Manage Users
 
 app.get("/users/all", verifyJWT, verifyAdmin, async (req, res) => {
   try {
