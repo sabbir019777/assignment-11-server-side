@@ -36,7 +36,7 @@ app.use((req, res, next) => {
   }
 });
 
-// CORS configuration: Allow any localhost origin (5173, 5174, etc.) or specified CLIENT_URL
+// CORS configuration
 
 const corsOptions = {
   origin: function (origin, callback) {
