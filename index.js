@@ -285,7 +285,7 @@ app.post("/users", async (req, res) => {
     .send({ message: "New user created.", insertedId: result.insertedId });
 });
 
-// 2. Check User Status
+// 2. Check User Statues
 
 app.get("/users/status", verifyJWT, async (req, res) => {
   try {
