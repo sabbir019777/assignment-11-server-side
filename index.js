@@ -1058,7 +1058,7 @@ app.delete("/users/:id", verifyJWT, verifyAdmin, async (req, res) => {
   }
 });
 
-// ৫. Admin Lessons: All lessons with optional status filter
+// ৫. Admin Lessons
 
 app.get("/admin/lessons", verifyJWT, verifyAdmin, async (req, res) => {
   try {
