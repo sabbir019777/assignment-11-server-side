@@ -750,7 +750,7 @@ app.get("/lessons/:id/similar", async (req, res) => {
   }
 });
 
-// 9. Get Comments
+// 9. Gets Comments
 
 app.get("/comments/:lessonId", async (req, res) => {
   try {
