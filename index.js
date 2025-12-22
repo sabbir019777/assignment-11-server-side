@@ -583,7 +583,7 @@ app.get("/lessons/featured", async (req, res) => {
   }
 });
 
-// 5. Most Saved Lessons
+// 5. Most Saved Lessonss
 
 app.get("/lessons/most-saved", async (req, res) => {
   try {
