@@ -18,7 +18,7 @@ const SERVER_BASE_URL =
 
 const app = express();
 
-// Helmet with disabled CORS restrictions (for development)
+// Helmet with disabled CORS 
 
 app.use(
   helmet({
