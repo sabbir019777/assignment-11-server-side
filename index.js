@@ -183,6 +183,7 @@ app.post(
 
 
 // MongoDB connection
+// ১. MongoClient এবং অন্যান্য ইমপোর্ট আগেই আছে...
 
 const client = new MongoClient(process.env.MONGO_URI, {
   serverApi: {
@@ -192,18 +193,24 @@ const client = new MongoClient(process.env.MONGO_URI, {
   },
 });
 
-let usersCollection,
-  lessonsCollection,
-  commentsCollection,
-  lessonsReportsCollection,
-  likesCollection,
-  paymentsCollection,
-  favouritesCollection;
+// ২. ভেরিয়েবলগুলো শুধু একবার ডিক্লেয়ার করুন (একদম টপে)
+let db;
+let usersCollection;
+let lessonsCollection;
+let commentsCollection;
+let lessonsReportsCollection;
+let likesCollection;
+let paymentsCollection;
+let favouritesCollection;
 
+// ৩. ডাটাবেস কানেকশন ফাংশন
 async function connectDB() {
+  if (db) return; // যদি আগে থেকেই কানেক্টেড থাকে তবে আর কিছু করবে না
   try {
     await client.connect();
-    const db = client.db("lifelessons");
+    db = client.db("lifelessons");
+    
+    // গ্লোবাল ভেরিয়েবলগুলোতে কালেকশন অ্যাসাইন করা
     usersCollection = db.collection("users");
     lessonsCollection = db.collection("lessons");
     commentsCollection = db.collection("comments");
@@ -211,13 +218,18 @@ async function connectDB() {
     likesCollection = db.collection("likes");
     paymentsCollection = db.collection("payments");
     favouritesCollection = db.collection("favourites");
-    console.log("✅ MongoDB connected (lifelessons)");
+    
+    console.log("✅ MongoDB connected successfully");
   } catch (error) {
-    console.error("MongoDB connection failed:", error);
-    process.exit(1);
+    console.error("❌ MongoDB connection failed:", error);
   }
 }
-connectDB();
+
+// ৪. এই মিডলওয়্যারটি সব রুটের (Routes) উপরে বসান
+app.use(async (req, res, next) => {
+  await connectDB(); 
+  next();
+});
 
 // --------------------
 // Middlewares
