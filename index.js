@@ -84,7 +84,7 @@ app.use("/uploads", express.static(uploadsDir));
 
 const upload = multer({ dest: uploadsDir });
 
-// Simple image upload endpoint used by the frontend at /upload/image
+// upload/image
 
 app.post("/upload/image", upload.single("image"), (req, res) => {
   try {
