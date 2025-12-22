@@ -664,7 +664,7 @@ app.post("/lessons", verifyJWT, async (req, res) => {
   }
 });
 
-// 8. Lesson Details (Fixed Public + Premium)
+// 8. Lesson Details 
 
 app.get("/lessons/:id", async (req, res) => {
   try {
