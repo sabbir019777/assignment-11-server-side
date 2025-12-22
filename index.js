@@ -857,9 +857,8 @@ app.post("/comments", verifyJWT, async (req, res) => {
   }
 });
 
-// 11. Toggle Favourite
+// 11. Toggle Favourites
 
-// Backend Route
 app.patch("/lessons/:id/toggle-favorite", verifyJWT, async (req, res) => {
   const lessonId = req.params.id;
 
