@@ -209,8 +209,7 @@ const verifyJWT = async (req, res, next) => {
   }
 };
 
-// --- [২. verifyAdmin Middleware] ---
-// --- [২. verifyAdmin Middleware - Updated] ---
+//  [২. verifyAdmin Middleware] 
 
 const verifyAdmin = async (req, res, next) => {
   const email = req.decoded?.email;
