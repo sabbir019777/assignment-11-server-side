@@ -443,7 +443,7 @@ app.get("/users/status", verifyJWT, async (req, res) => {
   }
 });
 
-// Upgrade user to premium (development / simple flow)
+// Upgrade user to premium 
 
 app.post("/users/upgrade", verifyJWT, async (req, res) => {
   try {
