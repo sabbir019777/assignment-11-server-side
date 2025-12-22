@@ -562,7 +562,7 @@ app.get("/users/top-contributors", async (req, res) => {
   }
 });
 
-// 4. Featured Lessons
+// 4. Featured Lessonss
 
 app.get("/lessons/featured", async (req, res) => {
   try {
