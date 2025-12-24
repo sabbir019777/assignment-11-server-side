@@ -1193,10 +1193,9 @@ app.get("/lessons/my-lessons/:uid", verifyJWT, async (req, res) => {
 app.patch("/lessons/delete-my-lesson/:id", async (req, res) => {
   try {
     const id = req.params.id;
-    // এখানে ObjectId এবং কালেকশন ব্যবহার করা হচ্ছে
+ 
     const query = { _id: new ObjectId(id) };
-    
-    // ডাটাবেস থেকে ডিলিট না করে শুধুমাত্র একটি ফ্ল্যাগ সেট করা (নিরাপদ উপায়)
+
     const updateDoc = {
       $set: {
         isDeletedByUser: true,
@@ -1220,15 +1219,11 @@ app.patch("/lessons/delete-my-lesson/:id", async (req, res) => {
 
 // --- Listener & Root ---
 
-// একদম শেষে গিয়ে আগের module.expors লাইনটি মুছে এটি দিন
 app.get("/", (req, res) =>
   res.send("✅ Digital Life Lessons Full API Running")
 );
-
-// Vercel এর জন্য এক্সপোর্ট
 module.exports = app; 
 
-// লোকাল হোস্টে চালানোর জন্য
 if (process.env.NODE_ENV !== 'production') {
   app.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
