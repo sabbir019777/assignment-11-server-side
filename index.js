@@ -277,30 +277,35 @@ const verifyJWT = async (req, res, next) => {
 
 const verifyAdmin = async (req, res, next) => {
   const email = req.decoded?.email;
-
-  const masterAdminEmail = "admins@gmail.com";
+  const masterAdminEmail = "admins@gmail.com"; // আপনার মাস্টার অ্যাডমিন ইমেইল
 
   if (!email) {
     return res.status(401).send({ message: "Unauthorized: Email not found" });
   }
 
   try {
+    // ডাটাবেস থেকে ইউজার খোঁজা
     const user = await usersCollection.findOne({ email: email });
 
+    // ১. চেক করা: ইউজারের রোল কি অ্যাডমিন? 
+    // ২. অথবা ইউজারের ইমেইল কি মাস্টার অ্যাডমিন ইমেইলের সাথে মিলে?
     const isAdmin =
-      user?.role === "admin" ||
+      (user && user.role === "admin") ||
       email.toLowerCase() === masterAdminEmail.toLowerCase();
 
     if (!isAdmin) {
-      console.log(`❌ Access Denied for: ${email}`);
-      return res.status(403).send({ message: "forbidden access" });
+      console.log(`❌ Access Denied: ${email}`);
+      return res.status(403).send({ 
+        message: "Forbidden Access: You do not have administrative privileges." 
+      });
     }
 
-    console.log(`✅ Admin Access Granted for: ${email}`);
+    // সব ঠিক থাকলে পরের ধাপে যাবে
+    console.log(`✅ Admin Access Granted: ${email}`);
     next();
   } catch (error) {
     console.error("Admin Verification Error:", error);
-    res.status(500).send({ message: "Internal Server Error" });
+    res.status(500).send({ message: "Internal Server Error during verification." });
   }
 };
 
@@ -893,7 +898,8 @@ app.get("/users/all", verifyJWT, verifyAdmin, async (req, res) => {
 
 // ৩. Manage Users: Promote/Demote (Universal Role Update)
 
-app.put("/users/:id/role", verifyJWT, verifyAdmin, async (req, res) => {
+// এই কোডটি আগেরটির জায়গায় বসান
+app.patch("/users/role/:id", verifyJWT, verifyAdmin, async (req, res) => {
   const id = req.params.id;
   const { role } = req.body;
   try {
@@ -901,7 +907,7 @@ app.put("/users/:id/role", verifyJWT, verifyAdmin, async (req, res) => {
       { _id: new ObjectId(id) },
       { $set: { role: role } }
     );
-    res.send({ success: true, message: `User role updated to ${role}` });
+    res.send(result);
   } catch (error) {
     res.status(500).send({ message: "Failed to update role" });
   }
