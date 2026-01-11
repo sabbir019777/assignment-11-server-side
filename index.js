@@ -1325,7 +1325,7 @@ app.patch("/lessons/delete-my-lesson/:id", async (req, res) => {
 });
 
 
-// --- Listener & Root ---
+// --- Listener & Roots ---
 
 app.get("/", (req, res) =>
   res.send("✅ Digital Life Lessons Full API Running")
