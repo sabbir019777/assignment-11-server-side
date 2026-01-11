@@ -27,7 +27,6 @@ app.use(
   })
 );
 
-// Webhook-এর জন্য Raw Body দরকার
 
 app.use((req, res, next) => {
   if (req.originalUrl === "/webhook/payment") {
@@ -36,8 +35,6 @@ app.use((req, res, next) => {
     express.json({ limit: "10mb" })(req, res, next);
   }
 });
-
-// CORS configuration
 
 // CORS configuration
 const corsOptions = {
@@ -76,7 +73,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// --- static uploads folder (for simple local image storage) ---
+// --- static uploads folder 
 
 const uploadsDir = path.join(__dirname, "uploads");
 app.use("/uploads", express.static(uploadsDir));
@@ -92,12 +89,12 @@ app.post("/upload/image", upload.single("image"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).send({ message: "No image uploaded." });
 
-    // ইমেজকে Base64 এ কনভার্ট করা
+   
     const imageBase64 = req.file.buffer.toString("base64");
     const formData = new URLSearchParams();
     formData.append("image", imageBase64);
 
-    // ImgBB API তে পাঠানো
+
     const response = await axios.post(
       `https://api.imgbb.com/1/upload?key=${process.env.IMGBB_API_KEY}`,
       formData
@@ -181,7 +178,6 @@ app.post(
 
 
 // MongoDB connection
-// ১. MongoClient এবং অন্যান্য ইমপোর্ট আগেই আছে...
 
 const client = new MongoClient(process.env.MONGO_URI, {
   serverApi: {
@@ -191,7 +187,7 @@ const client = new MongoClient(process.env.MONGO_URI, {
   },
 });
 
-// ২. ভেরিয়েবলগুলো শুধু একবার ডিক্লেয়ার করুন (একদম টপে)
+
 let db;
 let usersCollection;
 let lessonsCollection;
@@ -201,14 +197,14 @@ let likesCollection;
 let paymentsCollection;
 let favouritesCollection;
 
-// ৩. ডাটাবেস কানেকশন ফাংশন
+
 async function connectDB() {
-  if (db) return; // যদি আগে থেকেই কানেক্টেড থাকে তবে আর কিছু করবে না
+  if (db) return; 
   try {
     await client.connect();
     db = client.db("lifelessons");
     
-    // গ্লোবাল ভেরিয়েবলগুলোতে কালেকশন অ্যাসাইন করা
+  
     usersCollection = db.collection("users");
     lessonsCollection = db.collection("lessons");
     commentsCollection = db.collection("comments");
@@ -223,7 +219,6 @@ async function connectDB() {
   }
 }
 
-// ৪. এই মিডলওয়্যারটি সব রুটের (Routes) উপরে বসান
 app.use(async (req, res, next) => {
   await connectDB(); 
   next();
@@ -273,22 +268,20 @@ const verifyJWT = async (req, res, next) => {
   }
 };
 
-//  [২. verifyAdmin Middleware] 
+
 
 const verifyAdmin = async (req, res, next) => {
   const email = req.decoded?.email;
-  const masterAdminEmail = "admins@gmail.com"; // আপনার মাস্টার অ্যাডমিন ইমেইল
+  const masterAdminEmail = "admins@gmail.com"; 
 
   if (!email) {
     return res.status(401).send({ message: "Unauthorized: Email not found" });
   }
 
   try {
-    // ডাটাবেস থেকে ইউজার খোঁজা
+
     const user = await usersCollection.findOne({ email: email });
 
-    // ১. চেক করা: ইউজারের রোল কি অ্যাডমিন? 
-    // ২. অথবা ইউজারের ইমেইল কি মাস্টার অ্যাডমিন ইমেইলের সাথে মিলে?
     const isAdmin =
       (user && user.role === "admin") ||
       email.toLowerCase() === masterAdminEmail.toLowerCase();
@@ -300,7 +293,6 @@ const verifyAdmin = async (req, res, next) => {
       });
     }
 
-    // সব ঠিক থাকলে পরের ধাপে যাবে
     console.log(`✅ Admin Access Granted: ${email}`);
     next();
   } catch (error) {
@@ -309,7 +301,6 @@ const verifyAdmin = async (req, res, next) => {
   }
 };
 
-// 1. User Registrations
 
 
 
@@ -545,21 +536,21 @@ app.get("/users/top-contributors", async (req, res) => {
 app.get("/lessons/featured", async (req, res) => {
   try {
     const featured = await lessonsCollection
-      .find({
-        isFeatured: true,
-        isReviewed: true,
-        visibility: "public",
-      })
-      .sort({ _id: 1 })
-      .skip(56)
-      .limit(6)
+      .find({}) 
+      .sort({ createdAt: -1 })
+      .limit(8) 
       .toArray();
 
+
+    console.log("🔥 FORCE DEBUG: Found", featured.length, "lessons"); 
+    
     res.send(featured);
   } catch (error) {
+    console.error("Error:", error);
     res.status(500).send({ message: "Error fetching data" });
   }
 });
+
 
 // 5. Most Saved Lessonss
 
@@ -884,6 +875,117 @@ app.get("/api/lessons/favorites/:uid", verifyJWT, async (req, res) => {
 
 
 
+// --- NEW: User Dashboard Stats API ---
+app.get("/api/users/my-stats", verifyJWT, async (req, res) => {
+  try {
+    const uid = req.userUid;
+    const userEmail = req.userEmail;
+
+
+    const totalFavorites = await favouritesCollection.countDocuments({ userId: uid });
+
+
+    const totalLiked = await lessonsCollection.countDocuments({ likedBy: userEmail });
+
+    const totalLessonsTaken = totalFavorites + totalLiked; 
+
+    const vocabLearned = totalLessonsTaken * 5; 
+
+
+    const recentActivity = await favouritesCollection
+      .find({ userId: uid })
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .toArray();
+
+
+    
+
+    const lessonIds = recentActivity.map(item => new ObjectId(item.lessonId));
+    
+
+    const lessonDetails = await lessonsCollection
+      .find({ _id: { $in: lessonIds } })
+      .project({ title: 1, createdAt: 1 })
+      .toArray();
+
+
+    const history = recentActivity.map(item => {
+      const details = lessonDetails.find(l => l._id.toString() === item.lessonId);
+      return {
+        id: item._id,
+        lesson: details?.title || "Unknown Lesson",
+        date: item.createdAt.toISOString().split('T')[0], 
+        status: "Completed", 
+        score: "10/10"       
+      };
+    });
+
+
+    res.send({
+      totalLessonsTaken,
+      vocabLearned,
+      tutorialsCompleted: 0,
+      recentHistory: history 
+    });
+
+  } catch (error) {
+    console.error("User Stats Error:", error);
+    res.status(500).send({ message: "Failed to fetch user stats" });
+  }
+});
+
+
+// --- NEW: User Activity Graph API ---
+app.get("/api/users/activity-graph", verifyJWT, async (req, res) => {
+  try {
+    const uid = req.userUid;
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+
+    const activity = await favouritesCollection.aggregate([
+      { 
+        $match: { 
+          userId: uid, 
+          createdAt: { $gte: sevenDaysAgo } 
+        } 
+      },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]).toArray();
+
+
+    const labels = [];
+    const data = [];
+    
+
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().split('T')[0];
+      const found = activity.find(a => a._id === dateStr);
+      
+      labels.push(dateStr); 
+      data.push(found ? found.count : 0); 
+    }
+
+    res.send({ labels, data });
+
+  } catch (error) {
+    console.error("Activity Graph Error:", error);
+    res.status(500).send({ message: "Failed to fetch activity graph" });
+  }
+});
+
+
+
+
 
 // ২. Manage Users
 
@@ -898,7 +1000,7 @@ app.get("/users/all", verifyJWT, verifyAdmin, async (req, res) => {
 
 // ৩. Manage Users: Promote/Demote (Universal Role Update)
 
-// এই কোডটি আগেরটির জায়গায় বসান
+
 app.patch("/users/role/:id", verifyJWT, verifyAdmin, async (req, res) => {
   const id = req.params.id;
   const { role } = req.body;
