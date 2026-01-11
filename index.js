@@ -52,6 +52,9 @@ app.use(cors(corsOptions));
 
 
 
+
+
+
 app.use((req, res, next) => {
   const origin = req.get("origin");
 
@@ -998,7 +1001,7 @@ app.get("/users/all", verifyJWT, verifyAdmin, async (req, res) => {
   }
 });
 
-// ৩. Manage Users: Promote/Demote (Universal Role Update)
+// ৩. Manage Users
 
 
 app.patch("/users/role/:id", verifyJWT, verifyAdmin, async (req, res) => {
