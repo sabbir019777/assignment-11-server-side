@@ -38,7 +38,7 @@ app.use((req, res, next) => {
 const corsOptions = {
   origin: [
     "https://digital-lifes-lesson.netlify.app",
-    "https://digital-life-lesson-flame.vercel.app", 
+    "https://assignment-11-server-side-swart.vercel.app", 
     "http://localhost:5173",
     "http://localhost:5000"
   ],
