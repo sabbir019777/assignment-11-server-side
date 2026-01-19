@@ -17,7 +17,6 @@ const SERVER_BASE_URL = process.env.SERVER_BASE_URL || `http://localhost:${PORT}
 const app = express();
 
 // Helmet
-
 app.use(
   helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },
@@ -33,7 +32,6 @@ app.use((req, res, next) => {
 });
 
 // CORS configuration
-
 const corsOptions = {
   origin: [
     "https://digital-lifes-lesson.netlify.app",
@@ -49,7 +47,6 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 // --- static uploads folder 
-
 const uploadsDir = path.join(__dirname, "uploads");
 app.use("/uploads", express.static(uploadsDir));
 
@@ -77,7 +74,6 @@ app.post("/upload/image", upload.single("image"), async (req, res) => {
 });
 
 // Firebase Init
-
 try {
   if (process.env.FIREBASE_SERVICE_ACCOUNT) {
     const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
@@ -104,7 +100,6 @@ try {
 }
 
 // Payment Webhook
-
 app.post(
   "/webhook/payment",
   express.raw({ type: "application/json" }),
@@ -144,7 +139,6 @@ app.post(
 );
 
 // MongoDB connection
-
 const client = new MongoClient(process.env.MONGO_URI, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -179,7 +173,6 @@ app.use(async (req, res, next) => {
 });
 
 // Middlewares
-
 const verifyJWT = async (req, res, next) => {
   const auth = req.headers.authorization;
   if (!auth || !auth.startsWith("Bearer ")) {
@@ -363,7 +356,6 @@ app.get("/lessons/my-lessons/:uid", verifyJWT, async (req, res) => {
 });
 
 // User Delete My Lesson
-
 app.patch("/lessons/delete-my-lesson/:id", verifyJWT, async (req, res) => {
   try {
     const id = req.params.id;
@@ -376,14 +368,14 @@ app.patch("/lessons/delete-my-lesson/:id", verifyJWT, async (req, res) => {
 });
 
 
-// ---  REPORTS (RESOLVE & DELETE) SECTION  ---
-
+// ============================================
+// --- FIXED REPORTS & ADMIN DELETE SECTION ---
+// ============================================
 
 // 1. ADD REPORT 
 app.post("/lessons/report", verifyJWT, async (req, res) => {
   try {
     const report = req.body;
- 
     const result = await lessonsReportsCollection.insertOne({ ...report, createdAt: new Date() });
     res.send(result);
   } catch (error) {
@@ -392,7 +384,6 @@ app.post("/lessons/report", verifyJWT, async (req, res) => {
 });
 
 // 2. GET ALL REPORTS 
-
 app.get("/admin/reports", verifyJWT, verifyAdmin, async (req, res) => {
   try {
     const reports = await lessonsReportsCollection.find().toArray();
@@ -402,12 +393,12 @@ app.get("/admin/reports", verifyJWT, verifyAdmin, async (req, res) => {
   }
 });
 
-// 3. RESOLVE REPORT 
+// 3. RESOLVE REPORT (Fixed Route)
 app.delete("/admin/reports/:id", verifyJWT, verifyAdmin, async (req, res) => {
   try {
     const id = req.params.id;
     const result = await lessonsReportsCollection.deleteOne({ _id: new ObjectId(id) });
-    console.log("✅ Report Resolved/Deleted:", id);
+    console.log("✅ Report Resolved:", id);
     res.send(result);
   } catch (error) {
     console.error("❌ Failed to resolve report:", error);
@@ -415,11 +406,7 @@ app.delete("/admin/reports/:id", verifyJWT, verifyAdmin, async (req, res) => {
   }
 });
 
-
-// --- ADMIN ROUTES (LESSONS) ---
-
-
-// ADMIN DELETE LESSON 
+// 4. ADMIN DELETE LESSON (Fixed Route)
 app.delete("/admin/lessons/:id", verifyJWT, verifyAdmin, async (req, res) => {
   try {
     const id = req.params.id;
@@ -433,8 +420,7 @@ app.delete("/admin/lessons/:id", verifyJWT, verifyAdmin, async (req, res) => {
   }
 });
 
-// ADMIN FEATURE LESSON
-
+// 5. ADMIN FEATURE LESSON
 app.patch("/admin/lessons/featured/:id", verifyJWT, verifyAdmin, async (req, res) => {
   try {
     const id = req.params.id;
@@ -443,7 +429,6 @@ app.patch("/admin/lessons/featured/:id", verifyJWT, verifyAdmin, async (req, res
       $set: { ...req.body } 
     };
     const result = await lessonsCollection.updateOne(filter, updateDoc);
-    console.log("✅ Admin Featured Lesson:", id);
     res.send(result);
   } catch (error) {
      console.error("❌ Admin Feature Error:", error);
@@ -451,14 +436,17 @@ app.patch("/admin/lessons/featured/:id", verifyJWT, verifyAdmin, async (req, res
   }
 });
 
-// Also keeping the old delete route active just in case
-
+// Fallback Route for direct deletions (Just in case frontend uses this)
 app.delete("/lessons/:id", verifyJWT, verifyAdmin, async (req, res) => {
-    const result = await lessonsCollection.deleteOne({ _id: new ObjectId(req.params.id) });
-    res.send(result);
+    try {
+      const result = await lessonsCollection.deleteOne({ _id: new ObjectId(req.params.id) });
+      res.send(result);
+    } catch (err) {
+      res.status(500).send({ message: "Delete failed" });
+    }
 });
 
-
+// ============================================
 
 app.get("/lessons/:id", async (req, res) => {
   try {
@@ -510,7 +498,6 @@ app.patch("/lessons/:id", verifyJWT, async (req, res) => {
     const filter = { _id: new ObjectId(id) };
     const requester = await usersCollection.findOne({ uid: req.userUid });
     
-    
     if (requester?.role !== 'admin') {
        filter.creatorId = req.userUid;
     }
@@ -547,7 +534,6 @@ app.get("/api/users/my-stats", verifyJWT, async (req, res) => {
     res.status(500).send({ message: "Failed" });
   }
 });
-
 
 app.get("/users/all", verifyJWT, verifyAdmin, async (req, res) => {
   const users = await usersCollection.find().toArray();
