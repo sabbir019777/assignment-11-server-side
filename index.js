@@ -364,6 +364,17 @@ app.get("/lessons/my-lessons/:uid", verifyJWT, async (req, res) => {
   }
 });
 
+// --- DELETE LESSON ROUTE (Frontend sends PATCH request) ---
+app.patch("/lessons/delete-my-lesson/:id", verifyJWT, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const query = { _id: new ObjectId(id) };
+    const result = await lessonsCollection.deleteOne(query);
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({ message: "Failed to delete lesson" });
+  }
+});
 
 app.get("/lessons/:id", async (req, res) => {
   try {
