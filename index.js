@@ -481,6 +481,18 @@ app.get("/admin/lessons", verifyJWT, verifyAdmin, async (req, res) => {
 });
 
 
+// --- ADMIN DELETE LESSON ROUTE ---
+app.delete("/lessons/:id", verifyJWT, verifyAdmin, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const query = { _id: new ObjectId(id) };
+    const result = await lessonsCollection.deleteOne(query);
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({ message: "Failed to delete lesson" });
+  }
+});
+
 app.post("/lessons/:id/like", verifyJWT, async (req, res) => {
   const lessonId = req.params.id;
   const userEmail = req.userEmail;
