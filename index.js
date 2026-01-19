@@ -209,71 +209,75 @@ const verifyAdmin = async (req, res, next) => {
   if (!email) return res.status(401).send({ message: "Unauthorized: Email not found" });
   try {
     const user = await usersCollection.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } });
-    const isAdmin = (user && user.role === "admin") || email.toLowerCase() === masterAdminEmail.toLowerCase();
-    if (!isAdmin) return res.status(403).send({ message: "Forbidden Access" });
+    
+    // Fix: Prevent crash if user is null
+    if (!user) {
+        return res.status(403).send({ message: "Forbidden Access: User not found in DB" });
+    }
+
+    const isAdmin = (user.role === "admin") || email.toLowerCase() === masterAdminEmail.toLowerCase();
+    
+    if (!isAdmin) {
+        return res.status(403).send({ message: "Forbidden Access" });
+    }
     next();
   } catch (error) {
+    console.error("Verify Admin Error:", error);
     res.status(500).send({ message: "Internal Server Error" });
   }
 };
 
 // ============================================
-// --- 🔥 FIXED ADMIN ROUTES (Placed at TOP) 🔥 ---
+// --- 🔥 FIXED ADMIN & REPORT ROUTES 🔥 ---
 // ============================================
 
-// 1. RESOLVE REPORT (Universal Route - Works for both link types)
-const resolveReportHandler = async (req, res) => {
+// 1. RESOLVE REPORT (Fix for Resolved Button)
+app.delete("/admin/reports/:id", verifyJWT, verifyAdmin, async (req, res) => {
   try {
     const id = req.params.id;
-    if (!ObjectId.isValid(id)) return res.status(400).send({ message: "Invalid Report ID" });
-    
+    if (!ObjectId.isValid(id)) return res.status(400).send({ message: "Invalid ID format" });
+
     const result = await lessonsReportsCollection.deleteOne({ _id: new ObjectId(id) });
-    console.log("✅ Report Resolved:", id);
+    console.log("✅ Report Resolved:", id, "Deleted:", result.deletedCount);
     
-    // JSON response to prevent blank page
+    // Send JSON to prevent frontend crash
     res.status(200).json({ success: true, deletedCount: result.deletedCount });
   } catch (error) {
-    console.error("❌ Resolve Error:", error);
+    console.error("❌ Resolve Report Error:", error);
     res.status(500).json({ message: "Failed to resolve report" });
   }
-};
-// Both routes active to catch any frontend variation
-app.delete("/admin/reports/:id", verifyJWT, verifyAdmin, resolveReportHandler);
-app.delete("/reports/:id", verifyJWT, verifyAdmin, resolveReportHandler);
+});
 
-
-// 2. ADMIN DELETE LESSON (Fixed to prevent blank page)
-const adminDeleteLessonHandler = async (req, res) => {
+// 2. ADMIN DELETE LESSON (Fix for Delete Button / Blank Page)
+app.delete("/admin/lessons/:id", verifyJWT, verifyAdmin, async (req, res) => {
   try {
     const id = req.params.id;
-    if (!ObjectId.isValid(id)) return res.status(400).send({ message: "Invalid Lesson ID" });
+    if (!ObjectId.isValid(id)) return res.status(400).send({ message: "Invalid ID format" });
 
-    const query = { _id: new ObjectId(id) };
-    const result = await lessonsCollection.deleteOne(query);
-    console.log("✅ Admin Deleted Lesson:", id); 
+    const result = await lessonsCollection.deleteOne({ _id: new ObjectId(id) });
+    console.log("✅ Admin Deleted Lesson:", id, "Deleted:", result.deletedCount);
     
-    // JSON response to prevent blank page
+    // Send JSON to prevent frontend crash
     res.status(200).json({ success: true, deletedCount: result.deletedCount });
   } catch (error) {
-    console.error("❌ Admin Delete Error:", error);
+    console.error("❌ Admin Delete Lesson Error:", error);
     res.status(500).json({ message: "Failed to delete lesson" });
   }
-};
-// Both routes active
-app.delete("/admin/lessons/:id", verifyJWT, verifyAdmin, adminDeleteLessonHandler);
-app.delete("/lessons/:id", verifyJWT, verifyAdmin, adminDeleteLessonHandler);
-
+});
 
 // 3. ADMIN FEATURE TOGGLE
 app.patch("/admin/lessons/featured/:id", verifyJWT, verifyAdmin, async (req, res) => {
   try {
     const id = req.params.id;
+    if (!ObjectId.isValid(id)) return res.status(400).send({ message: "Invalid ID" });
+
     const filter = { _id: new ObjectId(id) };
     const updateDoc = { $set: { ...req.body } };
     const result = await lessonsCollection.updateOne(filter, updateDoc);
+    
     res.status(200).json({ success: true });
   } catch (error) {
-    res.status(500).send({ message: "Failed to feature lesson" });
+    res.status(500).json({ message: "Failed to feature lesson" });
   }
 });
 
@@ -298,7 +302,7 @@ app.get("/admin/lessons", verifyJWT, verifyAdmin, async (req, res) => {
 });
 
 // ============================================
-// --- OTHER ROUTES ---
+// --- OTHER ROUTES (Unchanged) ---
 // ============================================
 
 app.get("/users/status", verifyJWT, async (req, res) => {
