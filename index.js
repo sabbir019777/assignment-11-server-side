@@ -1,4 +1,3 @@
-// index.js (বা server.js)
 const express = require("express");
 const jwt = require("jsonwebtoken");
 const cors = require("cors");
@@ -12,13 +11,13 @@ const path = require("path");
 const axios = require("axios");
 
 const PORT = process.env.PORT || 5000;
-// Ensure no trailing slash issues in env, otherwise fallback
 const CLIENT_URL = process.env.VITE_APP_CLIENT_URL || "http://localhost:5173";
 const SERVER_BASE_URL = process.env.SERVER_BASE_URL || `http://localhost:${PORT}`;
 
 const app = express();
 
-// Helmet with disabled CORS policy to allow cross-origin images if needed
+// Helmet
+
 app.use(
   helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },
@@ -34,6 +33,7 @@ app.use((req, res, next) => {
 });
 
 // CORS configuration
+
 const corsOptions = {
   origin: [
     "https://digital-lifes-lesson.netlify.app",
@@ -49,10 +49,10 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 // --- static uploads folder 
+
 const uploadsDir = path.join(__dirname, "uploads");
 app.use("/uploads", express.static(uploadsDir));
 
-// upload/image
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
@@ -76,7 +76,8 @@ app.post("/upload/image", upload.single("image"), async (req, res) => {
   }
 });
 
-// Firebase Admin Init
+// Firebase Init
+
 try {
   if (process.env.FIREBASE_SERVICE_ACCOUNT) {
     const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
@@ -86,9 +87,14 @@ try {
     console.log("✅ Firebase Admin initialized from FIREBASE_SERVICE_ACCOUNT env var");
   } else {
     try {
-      const localServiceAccount = require(path.join(__dirname, "digital-life-lesson-firebase-adminsdk.json"));
+      const localServiceAccount = require(path.join(
+        __dirname,
+        "digital-life-lesson-firebase-adminsdk.json"
+      ));
       if (localServiceAccount && !admin.apps.length) {
-        admin.initializeApp({ credential: admin.credential.cert(localServiceAccount) });
+        admin.initializeApp({
+          credential: admin.credential.cert(localServiceAccount),
+        });
         console.log("✅ Firebase Admin initialized from local service account file");
       }
     } catch (err) {}
@@ -98,18 +104,26 @@ try {
 }
 
 // Payment Webhook
+
 app.post(
   "/webhook/payment",
   express.raw({ type: "application/json" }),
   async (req, res) => {
     try {
       const event = JSON.parse(req.body.toString());
-      if (event.type === "checkout.session.completed" || event.status === "completed") {
+      if (
+        event.type === "checkout.session.completed" ||
+        event.status === "completed"
+      ) {
         const paymentInfo = event.data.object;
         const userUid = paymentInfo.metadata?.userId || paymentInfo.userId;
-        if (!userUid) return res.status(400).send({ message: "Missing user ID." });
+        if (!userUid)
+          return res.status(400).send({ message: "Missing user ID." });
 
-        await usersCollection.updateOne({ uid: userUid }, { $set: { isPremium: true, updatedAt: new Date() } });
+        await usersCollection.updateOne(
+          { uid: userUid },
+          { $set: { isPremium: true, updatedAt: new Date() } }
+        );
         await paymentsCollection.insertOne({
           ...paymentInfo,
           userId: userUid,
@@ -130,6 +144,7 @@ app.post(
 );
 
 // MongoDB connection
+
 const client = new MongoClient(process.env.MONGO_URI, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -164,6 +179,7 @@ app.use(async (req, res, next) => {
 });
 
 // Middlewares
+
 const verifyJWT = async (req, res, next) => {
   const auth = req.headers.authorization;
   if (!auth || !auth.startsWith("Bearer ")) {
@@ -199,7 +215,6 @@ const verifyAdmin = async (req, res, next) => {
   const masterAdminEmail = "admins@gmail.com"; 
   if (!email) return res.status(401).send({ message: "Unauthorized: Email not found" });
   try {
-    // Case insensitive email check
     const user = await usersCollection.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } });
     const isAdmin = (user && user.role === "admin") || email.toLowerCase() === masterAdminEmail.toLowerCase();
     if (!isAdmin) return res.status(403).send({ message: "Forbidden Access" });
@@ -211,7 +226,6 @@ const verifyAdmin = async (req, res, next) => {
 
 // --- ROUTES ---
 
-// 1. User Status
 app.get("/users/status", verifyJWT, async (req, res) => {
   try {
     const uid = req.userUid;
@@ -232,7 +246,6 @@ app.get("/users/status", verifyJWT, async (req, res) => {
   }
 });
 
-// 2. Toggle Favorite
 app.patch("/lessons/:id/toggle-favorite", verifyJWT, async (req, res) => {
   const lessonId = req.params.id;
   const uid = req.userUid;
@@ -254,7 +267,6 @@ app.patch("/lessons/:id/toggle-favorite", verifyJWT, async (req, res) => {
   }
 });
 
-// 3. Create/Sync User
 app.post("/users", async (req, res) => {
   const user = req.body;
   if (!user.uid || !user.email) return res.status(400).send({ message: "Missing required fields." });
@@ -351,6 +363,7 @@ app.get("/lessons/my-lessons/:uid", verifyJWT, async (req, res) => {
 });
 
 // User Delete My Lesson
+
 app.patch("/lessons/delete-my-lesson/:id", verifyJWT, async (req, res) => {
   try {
     const id = req.params.id;
@@ -362,12 +375,51 @@ app.patch("/lessons/delete-my-lesson/:id", verifyJWT, async (req, res) => {
   }
 });
 
-// ==================================================================
-// --- 🚨 CRITICAL FIXES FOR ADMIN ROUTES BASED ON YOUR ERROR LOGS 🚨 ---
-// ==================================================================
 
-// 1. ADMIN DELETE (Fix for: Cannot DELETE /admin/lessons/:id)
-// আপনার এরর লগে দেখা যাচ্ছে ফ্রন্টএন্ড /admin/lessons/... এ হিট করছে
+// ---  REPORTS (RESOLVE & DELETE) SECTION  ---
+
+
+// 1. ADD REPORT 
+app.post("/lessons/report", verifyJWT, async (req, res) => {
+  try {
+    const report = req.body;
+ 
+    const result = await lessonsReportsCollection.insertOne({ ...report, createdAt: new Date() });
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({ message: "Failed to submit report" });
+  }
+});
+
+// 2. GET ALL REPORTS 
+
+app.get("/admin/reports", verifyJWT, verifyAdmin, async (req, res) => {
+  try {
+    const reports = await lessonsReportsCollection.find().toArray();
+    res.send(reports);
+  } catch (error) {
+    res.status(500).send({ message: "Failed to fetch reports" });
+  }
+});
+
+// 3. RESOLVE REPORT 
+app.delete("/admin/reports/:id", verifyJWT, verifyAdmin, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const result = await lessonsReportsCollection.deleteOne({ _id: new ObjectId(id) });
+    console.log("✅ Report Resolved/Deleted:", id);
+    res.send(result);
+  } catch (error) {
+    console.error("❌ Failed to resolve report:", error);
+    res.status(500).send({ message: "Failed to resolve report" });
+  }
+});
+
+
+// --- ADMIN ROUTES (LESSONS) ---
+
+
+// ADMIN DELETE LESSON 
 app.delete("/admin/lessons/:id", verifyJWT, verifyAdmin, async (req, res) => {
   try {
     const id = req.params.id;
@@ -381,14 +433,14 @@ app.delete("/admin/lessons/:id", verifyJWT, verifyAdmin, async (req, res) => {
   }
 });
 
-// 2. ADMIN FEATURE (Fix for: Cannot PATCH /admin/lessons/featured/:id)
-// আপনার এরর লগে দেখা যাচ্ছে ফ্রন্টএন্ড /admin/lessons/featured/... এ হিট করছে
+// ADMIN FEATURE LESSON
+
 app.patch("/admin/lessons/featured/:id", verifyJWT, verifyAdmin, async (req, res) => {
   try {
     const id = req.params.id;
     const filter = { _id: new ObjectId(id) };
     const updateDoc = {
-      $set: { ...req.body } // Body should have { isFeatured: true/false }
+      $set: { ...req.body } 
     };
     const result = await lessonsCollection.updateOne(filter, updateDoc);
     console.log("✅ Admin Featured Lesson:", id);
@@ -399,13 +451,14 @@ app.patch("/admin/lessons/featured/:id", verifyJWT, verifyAdmin, async (req, res
   }
 });
 
-// Also adding generic Delete/Feature just in case other parts use it
+// Also keeping the old delete route active just in case
+
 app.delete("/lessons/:id", verifyJWT, verifyAdmin, async (req, res) => {
     const result = await lessonsCollection.deleteOne({ _id: new ObjectId(req.params.id) });
     res.send(result);
 });
 
-// ==================================================================
+
 
 app.get("/lessons/:id", async (req, res) => {
   try {
@@ -457,11 +510,16 @@ app.patch("/lessons/:id", verifyJWT, async (req, res) => {
     const filter = { _id: new ObjectId(id) };
     const requester = await usersCollection.findOne({ uid: req.userUid });
     
-    // Allow if admin OR if creator
+    
     if (requester?.role !== 'admin') {
        filter.creatorId = req.userUid;
     }
     const result = await lessonsCollection.updateOne(filter, { $set: { ...req.body, updatedAt: new Date() } });
+    
+    if (result.matchedCount === 0) {
+      return res.status(403).send({ message: "Unauthorized or Lesson not found" });
+    }
+    
     res.send(result);
   } catch (error) {
     res.status(500).send({ message: "Failed" });
@@ -489,6 +547,7 @@ app.get("/api/users/my-stats", verifyJWT, async (req, res) => {
     res.status(500).send({ message: "Failed" });
   }
 });
+
 
 app.get("/users/all", verifyJWT, verifyAdmin, async (req, res) => {
   const users = await usersCollection.find().toArray();
