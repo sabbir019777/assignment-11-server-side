@@ -352,6 +352,19 @@ app.post("/lessons", verifyJWT, async (req, res) => {
   }
 });
 
+// --- NEWLY ADDED ROUTE FOR MY LESSONS ---
+app.get("/lessons/my-lessons/:uid", verifyJWT, async (req, res) => {
+  try {
+    const uid = req.params.uid;
+    const query = { creatorId: uid };
+    const result = await lessonsCollection.find(query).toArray();
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({ message: "Failed to fetch my lessons" });
+  }
+});
+// ----------------------------------------
+
 app.get("/lessons/:id", async (req, res) => {
   try {
     const lessonId = req.params.id;
