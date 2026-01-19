@@ -363,7 +363,7 @@ app.get("/lessons/my-lessons/:uid", verifyJWT, async (req, res) => {
     res.status(500).send({ message: "Failed to fetch my lessons" });
   }
 });
-// ----------------------------------------
+
 
 app.get("/lessons/:id", async (req, res) => {
   try {
@@ -426,6 +426,7 @@ app.get("/api/users/my-stats", verifyJWT, async (req, res) => {
     res.status(500).send({ message: "Failed" });
   }
 });
+
 
 app.get("/users/all", verifyJWT, verifyAdmin, async (req, res) => {
   const users = await usersCollection.find().toArray();
