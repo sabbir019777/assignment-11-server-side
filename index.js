@@ -1,4 +1,4 @@
-// server.js
+// index.js (বা server.js)
 const express = require("express");
 const jwt = require("jsonwebtoken");
 const cors = require("cors");
@@ -20,13 +20,11 @@ const SERVER_BASE_URL =
 const app = express();
 
 // Helmet with disabled CORS 
-
 app.use(
   helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },
   })
 );
-
 
 app.use((req, res, next) => {
   if (req.originalUrl === "/webhook/payment") {
@@ -39,8 +37,9 @@ app.use((req, res, next) => {
 // CORS configuration
 const corsOptions = {
   origin: [
-    "https://digital-lifes-lesson.netlify.app", 
-    "http://localhost:5173", 
+    "https://digital-lifes-lesson.netlify.app",
+    "https://digital-life-lesson-flame.vercel.app", 
+    "http://localhost:5173",
     "http://localhost:5000"
   ],
   credentials: true,
@@ -50,41 +49,11 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-
-
-
-
-
-app.use((req, res, next) => {
-  const origin = req.get("origin");
-
-  if (!origin) {
-    res.header("Access-Control-Allow-Origin", "*");
-  } else if (
-    origin === CLIENT_URL ||
-    origin.match(/^http:\/\/localhost:\d+$/)
-  ) {
-    res.header("Access-Control-Allow-Origin", origin);
-  }
-
-  res.header(
-    "Access-Control-Allow-Methods",
-    "GET, HEAD, PUT, PATCH, POST, DELETE, OPTIONS"
-  );
-  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  res.header("Access-Control-Allow-Credentials", "true");
-  next();
-});
-
 // --- static uploads folder 
-
 const uploadsDir = path.join(__dirname, "uploads");
 app.use("/uploads", express.static(uploadsDir));
 
-
-
 // upload/image
-
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
@@ -92,11 +61,9 @@ app.post("/upload/image", upload.single("image"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).send({ message: "No image uploaded." });
 
-   
     const imageBase64 = req.file.buffer.toString("base64");
     const formData = new URLSearchParams();
     formData.append("image", imageBase64);
-
 
     const response = await axios.post(
       `https://api.imgbb.com/1/upload?key=${process.env.IMGBB_API_KEY}`,
@@ -113,32 +80,27 @@ app.post("/upload/image", upload.single("image"), async (req, res) => {
 try {
   if (process.env.FIREBASE_SERVICE_ACCOUNT) {
     const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-    admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
-    console.log(
-      "✅ Firebase Admin initialized from FIREBASE_SERVICE_ACCOUNT env var"
-    );
+    if (!admin.apps.length) {
+      admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+    }
+    console.log("✅ Firebase Admin initialized from FIREBASE_SERVICE_ACCOUNT env var");
   } else {
     try {
       const localServiceAccount = require(path.join(
         __dirname,
         "digital-life-lesson-firebase-adminsdk.json"
       ));
-      if (localServiceAccount) {
+      if (localServiceAccount && !admin.apps.length) {
         admin.initializeApp({
           credential: admin.credential.cert(localServiceAccount),
         });
-        console.log(
-          "✅ Firebase Admin initialized from local service account file"
-        );
+        console.log("✅ Firebase Admin initialized from local service account file");
       }
     } catch (err) {}
   }
 } catch (error) {
   console.error("Firebase Admin init failed:", error);
 }
-
-
-
 
 app.post(
   "/webhook/payment",
@@ -178,10 +140,7 @@ app.post(
   }
 );
 
-
-
 // MongoDB connection
-
 const client = new MongoClient(process.env.MONGO_URI, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -190,24 +149,13 @@ const client = new MongoClient(process.env.MONGO_URI, {
   },
 });
 
-
-let db;
-let usersCollection;
-let lessonsCollection;
-let commentsCollection;
-let lessonsReportsCollection;
-let likesCollection;
-let paymentsCollection;
-let favouritesCollection;
-
+let db, usersCollection, lessonsCollection, commentsCollection, lessonsReportsCollection, likesCollection, paymentsCollection, favouritesCollection;
 
 async function connectDB() {
   if (db) return; 
   try {
     await client.connect();
     db = client.db("lifelessons");
-    
-  
     usersCollection = db.collection("users");
     lessonsCollection = db.collection("lessons");
     commentsCollection = db.collection("comments");
@@ -215,7 +163,6 @@ async function connectDB() {
     likesCollection = db.collection("likes");
     paymentsCollection = db.collection("payments");
     favouritesCollection = db.collection("favourites");
-    
     console.log("✅ MongoDB connected successfully");
   } catch (error) {
     console.error("❌ MongoDB connection failed:", error);
@@ -227,43 +174,30 @@ app.use(async (req, res, next) => {
   next();
 });
 
-// --------------------
 // Middlewares
-// --------------------
-
 const verifyJWT = async (req, res, next) => {
   const auth = req.headers.authorization;
   if (!auth || !auth.startsWith("Bearer ")) {
     return res.status(401).send({ message: "Unauthorized: Token required" });
   }
-
   const token = auth.split(" ")[1];
-
   try {
     let decodedData = null;
-
     if (typeof admin !== "undefined" && admin?.auth) {
       try {
         const decoded = await admin.auth().verifyIdToken(token);
         decodedData = { email: decoded.email, uid: decoded.uid || decoded.sub };
       } catch (fbErr) {}
     }
-
     if (!decodedData) {
       const secret = process.env.JWT_SECRET || process.env.ACCESS_TOKEN_SECRET;
-      if (!secret)
-        return res
-          .status(500)
-          .send({ message: "JWT Secret missing in Server Environment." });
-
+      if (!secret) return res.status(500).send({ message: "JWT Secret missing in Server Environment." });
       const decoded = jwt.verify(token, secret);
       decodedData = { email: decoded.email, uid: decoded.uid };
     }
-
     req.decoded = decodedData;
     req.userEmail = decodedData.email;
     req.userUid = decodedData.uid;
-
     next();
   } catch (error) {
     console.error("JWT Verification Failed:", error.message);
@@ -271,51 +205,27 @@ const verifyJWT = async (req, res, next) => {
   }
 };
 
-
-
 const verifyAdmin = async (req, res, next) => {
   const email = req.decoded?.email;
   const masterAdminEmail = "admins@gmail.com"; 
-
-  if (!email) {
-    return res.status(401).send({ message: "Unauthorized: Email not found" });
-  }
-
+  if (!email) return res.status(401).send({ message: "Unauthorized: Email not found" });
   try {
-
     const user = await usersCollection.findOne({ email: email });
-
-    const isAdmin =
-      (user && user.role === "admin") ||
-      email.toLowerCase() === masterAdminEmail.toLowerCase();
-
-    if (!isAdmin) {
-      console.log(`❌ Access Denied: ${email}`);
-      return res.status(403).send({ 
-        message: "Forbidden Access: You do not have administrative privileges." 
-      });
-    }
-
-    console.log(`✅ Admin Access Granted: ${email}`);
+    const isAdmin = (user && user.role === "admin") || email.toLowerCase() === masterAdminEmail.toLowerCase();
+    if (!isAdmin) return res.status(403).send({ message: "Forbidden Access" });
     next();
   } catch (error) {
-    console.error("Admin Verification Error:", error);
-    res.status(500).send({ message: "Internal Server Error during verification." });
+    res.status(500).send({ message: "Internal Server Error" });
   }
 };
 
-
-
-
-// 2. Check User Statues
+// --- ROUTES ---
 
 app.get("/users/status", verifyJWT, async (req, res) => {
   try {
     const uid = req.userUid;
     const user = await usersCollection.findOne({ uid });
-
     if (!user) return res.status(404).send({ message: "User not found." });
-
     res.status(200).send({
       uid: user.uid,
       email: user.email,
@@ -331,32 +241,20 @@ app.get("/users/status", verifyJWT, async (req, res) => {
   }
 });
 
-// 11. Toggle Favourite
-
 app.patch("/lessons/:id/toggle-favorite", verifyJWT, async (req, res) => {
   const lessonId = req.params.id;
   const uid = req.userUid;
-
-  if (!ObjectId.isValid(lessonId))
-    return res.status(400).send({ message: "Invalid ID." });
-
+  if (!ObjectId.isValid(lessonId)) return res.status(400).send({ message: "Invalid ID." });
   try {
     const query = { userId: uid, lessonId: lessonId };
     const existing = await favouritesCollection.findOne(query);
-
     if (existing) {
       await favouritesCollection.deleteOne({ _id: existing._id });
-      await lessonsCollection.updateOne(
-        { _id: new ObjectId(lessonId) },
-        { $inc: { favoritesCount: -1 } }
-      );
+      await lessonsCollection.updateOne({ _id: new ObjectId(lessonId) }, { $inc: { favoritesCount: -1 } });
       return res.send({ success: true, message: "Removed", isFavorite: false });
     } else {
       await favouritesCollection.insertOne({ ...query, createdAt: new Date() });
-      await lessonsCollection.updateOne(
-        { _id: new ObjectId(lessonId) },
-        { $inc: { favoritesCount: 1 } }
-      );
+      await lessonsCollection.updateOne({ _id: new ObjectId(lessonId) }, { $inc: { favoritesCount: 1 } });
       return res.send({ success: true, message: "Added", isFavorite: true });
     }
   } catch (error) {
@@ -364,979 +262,185 @@ app.patch("/lessons/:id/toggle-favorite", verifyJWT, async (req, res) => {
   }
 });
 
-
-
-// ROUTES
-
-
 app.post("/users", async (req, res) => {
   const user = req.body;
-  if (!user.uid || !user.email)
-    return res
-      .status(400)
-      .send({ message: "Missing required fields: uid or email." });
-
+  if (!user.uid || !user.email) return res.status(400).send({ message: "Missing required fields." });
   const existingUser = await usersCollection.findOne({ uid: user.uid });
   const now = new Date();
-
   if (existingUser) {
-    await usersCollection.updateOne(
-      { uid: user.uid },
-      {
-        $set: {
-          lastLogin: now,
-          name: user.name,
-          photoURL: user.photoURL,
-          email: user.email,
-        },
-      }
-    );
-    return res
-      .status(200)
-      .send({ message: "User data synchronized.", user: existingUser });
+    await usersCollection.updateOne({ uid: user.uid }, { $set: { lastLogin: now, name: user.name, photoURL: user.photoURL, email: user.email } });
+    return res.status(200).send({ message: "User data synchronized.", user: existingUser });
   }
-
-  const newUser = {
-    uid: user.uid,
-    email: user.email,
-    name: user.name || "Anonymous User",
-    photoURL: user.photoURL || "",
-    role: "user",
-    isPremium: false,
-    totalLessonsCreated: 0,
-    createdAt: now,
-    lastLogin: now,
-  };
-
+  const newUser = { uid: user.uid, email: user.email, name: user.name || "Anonymous User", photoURL: user.photoURL || "", role: "user", isPremium: false, totalLessonsCreated: 0, createdAt: now, lastLogin: now };
   const result = await usersCollection.insertOne(newUser);
-  res
-    .status(201)
-    .send({ message: "New user created.", insertedId: result.insertedId });
+  res.status(201).send({ message: "New user created.", insertedId: result.insertedId });
 });
-
-
-// Upgrade user to premium 
 
 app.post("/users/upgrade", verifyJWT, async (req, res) => {
   try {
     const uid = req.userUid;
-    if (!uid) {
-      console.warn("❌ Upgrade attempt without UID");
-      return res.status(401).send({ message: "Unauthorized" });
-    }
-
-    console.log("🔄 Processing upgrade for UID:", uid);
-
-    const updateResult = await usersCollection.findOneAndUpdate(
-      { uid },
-      { $set: { isPremium: true, upgradedAt: new Date() } },
-      { returnDocument: "after", upsert: true }
-    );
-
+    const updateResult = await usersCollection.findOneAndUpdate({ uid }, { $set: { isPremium: true, upgradedAt: new Date() } }, { returnDocument: "after", upsert: true });
     const updatedUser = updateResult.value || updateResult;
-
-    if (!updatedUser) {
-      console.error("❌ Update returned no user document");
-      return res.status(500).send({ message: "Failed to update user." });
-    }
-
-    // Return consistent response with essential user fields
-
-    const responseUser = {
-      uid: updatedUser.uid,
-      email: updatedUser.email,
-      name: updatedUser.name || updatedUser.displayName,
-      photoURL: updatedUser.photoURL || "",
-      isPremium: true,
-      role: updatedUser.role || "user",
-      upgradedAt: updatedUser.upgradedAt,
-      totalLessonsCreated: updatedUser.totalLessonsCreated || 0,
-    };
-
-    console.log("✅ User upgraded to premium:", uid);
-    return res.status(200).send({
-      message: "Upgraded to premium successfully",
-      user: responseUser,
-    });
+    return res.status(200).send({ message: "Upgraded", user: updatedUser });
   } catch (error) {
-    console.error("❌ Failed to upgrade user:", error.message || error);
-    return res.status(500).send({
-      message: "Failed to upgrade user. Please try again.",
-      error: error.message,
-    });
+    return res.status(500).send({ message: "Failed" });
   }
 });
-
-// 3. Top Contributors 
 
 app.get("/users/top-contributors", async (req, res) => {
   try {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-    let contributors = await lessonsCollection
-      .aggregate([
-        {
-          $match: {
-            createdAt: { $gte: sevenDaysAgo },
-          },
-        },
-        {
-          $group: {
-            _id: "$creatorId",
-            weeklyLessons: { $sum: 1 },
-          },
-        },
-        {
-          $lookup: {
-            from: "users",
-            localField: "_id",
-            foreignField: "uid",
-            as: "userInfo",
-          },
-        },
-        { $unwind: "$userInfo" },
-        {
-          $project: {
-            _id: 0,
-            uid: "$_id",
-            weeklyLessons: 1,
-            name: { $ifNull: ["$userInfo.name", "$userInfo.displayName"] },
-            photoURL: { $ifNull: ["$userInfo.photoURL", "$userInfo.photo"] },
-          },
-        },
-        { $sort: { weeklyLessons: -1 } },
-        { $limit: 5 },
-      ])
-      .toArray();
-
-    if (contributors.length < 5) {
-      const additionalUsers = await usersCollection
-        .find({ uid: { $nin: contributors.map((c) => c.uid) } })
-        .limit(5 - contributors.length)
-        .toArray();
-
-      const extraData = additionalUsers.map((u) => ({
-        uid: u.uid,
-        weeklyLessons: 0,
-        name: u.name || u.displayName || "Anonymous User",
-        photoURL: u.photoURL || u.photo || "",
-      }));
-
-      contributors = [...contributors, ...extraData];
-    }
-
-    console.log("Final contributors count to send:", contributors.length);
-    res.send(contributors);
+    let contributors = await lessonsCollection.aggregate([
+      { $match: { createdAt: { $gte: sevenDaysAgo } } },
+      { $group: { _id: "$creatorId", weeklyLessons: { $sum: 1 } } },
+      { $lookup: { from: "users", localField: "_id", foreignField: "uid", as: "userInfo" } },
+      { $unwind: "$userInfo" },
+      { $project: { _id: 0, uid: "$_id", weeklyLessons: 1, name: "$userInfo.name", photoURL: "$userInfo.photoURL" } },
+      { $sort: { weeklyLessons: -1 } },
+      { $limit: 5 }
+    ]).toArray();
+    console.log("✅ Top contributors fetched successfully:", contributors.length);
+    res.status(200).send(contributors);
   } catch (error) {
-    console.error("Aggregation Error:", error);
-    res.status(500).send({ message: "Error", error: error.message });
+    console.error("❌ Error fetching top contributors:", error.message);
+    res.status(500).send({ message: "Error fetching top contributors", error: error.message });
   }
 });
-
-// 4. Featured Lessonss
 
 app.get("/lessons/featured", async (req, res) => {
   try {
-    const featured = await lessonsCollection
-      .find({}) 
-      .sort({ createdAt: -1 })
-      .limit(8) 
-      .toArray();
-
-
-    console.log("🔥 FORCE DEBUG: Found", featured.length, "lessons"); 
-    
-    res.send(featured);
+    const featured = await lessonsCollection.find({}).sort({ createdAt: -1 }).limit(8).toArray();
+    console.log("✅ Featured lessons fetched successfully:", featured.length);
+    res.status(200).send(featured);
   } catch (error) {
-    console.error("Error:", error);
-    res.status(500).send({ message: "Error fetching data" });
+    console.error("❌ Error fetching featured lessons:", error.message);
+    res.status(500).send({ message: "Error fetching featured lessons", error: error.message });
   }
 });
-
-
-// 5. Most Saved Lessonss
 
 app.get("/lessons/most-saved", async (req, res) => {
   try {
-    const mostSaved = await lessonsCollection
-      .find({ isReviewed: true })
-      .sort({
-        favoritesCount: -1,
-        createdAt: -1,
-      })
-      .skip(82)
-      .limit(10)
-      .toArray();
-
-    res.send(mostSaved);
+    const mostSaved = await lessonsCollection.find({ isReviewed: true }).sort({ favoritesCount: -1, createdAt: -1 }).limit(10).toArray();
+    console.log("✅ Most saved lessons fetched successfully:", mostSaved.length);
+    res.status(200).send(mostSaved);
   } catch (error) {
-    console.error("Most Saved Fetch Error:", error);
-    res.status(500).send({ message: "Failed to fetch most saved lessons" });
+    console.error("❌ Error fetching most saved lessons:", error.message);
+    res.status(500).send({ message: "Error fetching most saved lessons", error: error.message });
   }
 });
-
-// 6. Public Lessonss
 
 app.get("/lessons/public", async (req, res) => {
   try {
-    const publicLessons = await lessonsCollection
-      .find({
-        visibility: "public",
-        isReviewed: true,
-      })
-      .sort({ createdAt: -1 })
-      .limit(12)
-      .toArray();
-
+    const publicLessons = await lessonsCollection.find({ visibility: "public", isReviewed: true }).sort({ createdAt: -1 }).limit(12).toArray();
     res.send(publicLessons);
   } catch (error) {
-    console.error("Public Lessons Fetch Error:", error);
-    res.status(500).send({ message: "Failed to fetch public lessons" });
+    res.status(500).send({ message: "Failed" });
   }
 });
-
-
-// 7. Create Lessons
 
 app.post("/lessons", verifyJWT, async (req, res) => {
-  const user = await usersCollection.findOne({ uid: req.userUid });
-  const isPremiumLesson = req.body.accessLevel === "Premium";
   const newLesson = req.body;
-  if (!newLesson.title || !newLesson.description || !newLesson.creatorId) {
-    return res.status(400).send({ message: "Missing required fields." });
-  }
-
+  if (!newLesson.title || !newLesson.creatorId) return res.status(400).send({ message: "Missing fields" });
   try {
-    const lessonToInsert = {
-      ...newLesson,
-      creatorEmail: req.userEmail,
-      isPremium: isPremiumLesson,
-      likesCount: 0,
-      favoritesCount: 0,
-      viewsCount: 0,
-      reportedCount: 0,
-      isReviewed: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
+    const lessonToInsert = { ...newLesson, likesCount: 0, favoritesCount: 0, viewsCount: 0, reportedCount: 0, isReviewed: true, createdAt: new Date() };
     const result = await lessonsCollection.insertOne(lessonToInsert);
-    await usersCollection.updateOne(
-      { uid: req.userUid },
-      { $inc: { totalLessonsCreated: 1 } },
-      { upsert: true }
-    );
-
-    res.status(201).send({
-      insertedId: result.insertedId,
-      message: "Lesson successfully created.",
-    });
+    await usersCollection.updateOne({ uid: req.userUid }, { $inc: { totalLessonsCreated: 1 } });
+    res.status(201).send({ insertedId: result.insertedId });
   } catch (error) {
-    res.status(500).send({ message: "Server failed to create lesson." });
+    res.status(500).send({ message: "Failed" });
   }
 });
-
-// 8. Lesson Details 
 
 app.get("/lessons/:id", async (req, res) => {
   try {
     const lessonId = req.params.id;
-    if (!ObjectId.isValid(lessonId))
-      return res.status(400).send({ message: "Invalid Lesson ID." });
-
-    const objectId = new ObjectId(lessonId);
-    const lesson = await lessonsCollection.findOne({ _id: objectId });
-    if (!lesson) return res.status(404).send({ message: "Lesson not found." });
-
-    if (!lesson.isPremium) {
-      await lessonsCollection.updateOne(
-        { _id: objectId },
-        { $inc: { viewsCount: 1 } }
-      );
-      return res.send(lesson);
-    }
-
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res
-        .status(403)
-        .send({ message: "Premium lesson. Upgrade required." });
-    }
-
-    try {
-      const token = authHeader.split(" ")[1];
-      const secret = process.env.JWT_SECRET || process.env.ACCESS_TOKEN_SECRET;
-      const decoded = jwt.verify(token, secret);
-
-      const user = await usersCollection.findOne({ uid: decoded.uid });
-      if (!user || (user.isPremium !== true && user.uid !== lesson.creatorId)) {
-        return res
-          .status(403)
-          .send({ message: "Premium subscription required to view." });
-      }
-
-      await lessonsCollection.updateOne(
-        { _id: objectId },
-        { $inc: { viewsCount: 1 } }
-      );
-      res.send(lesson);
-    } catch (error) {
-      console.error("JWT verification failed:", error.message);
-      return res.status(403).send({ message: "Invalid token" });
-    }
+    if (!ObjectId.isValid(lessonId)) return res.status(400).send({ message: "Invalid ID" });
+    const lesson = await lessonsCollection.findOne({ _id: new ObjectId(lessonId) });
+    if (!lesson) return res.status(404).send({ message: "Not found" });
+    await lessonsCollection.updateOne({ _id: new ObjectId(lessonId) }, { $inc: { viewsCount: 1 } });
+    res.send(lesson);
   } catch (error) {
-    console.error("Fetch lesson failed:", error);
-    res.status(500).send({ message: "Server failed to fetch lesson." });
+    res.status(500).send({ message: "Failed" });
   }
 });
-
-// Get Similar Lessons by Category
 
 app.get("/lessons/:id/similar", async (req, res) => {
   try {
     const lessonId = req.params.id;
     const category = req.query.category;
-
-    if (!ObjectId.isValid(lessonId)) {
-      return res.status(400).send({ message: "Invalid Lesson ID." });
-    }
-
-    const objectId = new ObjectId(lessonId);
-    const filter = {
-      _id: { $ne: objectId },
-      ...(category && { category: category }),
-      isPremium: false,
-    };
-
-    const similarLessons = await lessonsCollection
-      .find(filter)
-      .limit(5)
-      .toArray();
-
-    res.send(similarLessons || []);
+    const filter = { _id: { $ne: new ObjectId(lessonId) }, ...(category && { category }), isPremium: false };
+    const similar = await lessonsCollection.find(filter).limit(5).toArray();
+    res.send(similar);
   } catch (error) {
-    console.error("Fetch similar lessons failed:", error);
-    res
-      .status(500)
-      .send({ message: "Server failed to fetch similar lessons." });
+    res.status(500).send({ message: "Failed" });
   }
 });
-
-// 9. Gets Comments
 
 app.get("/comments/:lessonId", async (req, res) => {
   try {
-    const lessonId = req.params.lessonId;
-    const comments = await commentsCollection
-      .find({ lessonId })
-      .sort({ createdAt: -1 })
-      .toArray();
-    const normalized = comments.map((c) => ({
-      _id: c._id,
-      text: c.text || c.commentText || "",
-      userId: c.userId || c.commentedBy || c.user || "",
-      userName: c.userName || c.userName || "",
-      userPhoto: c.userPhoto || c.photoURL || "",
-      createdAt: c.createdAt,
-    }));
-    res.status(200).json(normalized);
+    const comments = await commentsCollection.find({ lessonId: req.params.lessonId }).sort({ createdAt: -1 }).toArray();
+    res.send(comments);
   } catch (error) {
-    console.error("Error fetching comments:", error);
-    res
-      .status(500)
-      .json({ message: "Internal server error while fetching comments." });
+    res.status(500).send({ message: "Failed" });
   }
 });
-
-// Delete a comment by id
-
-app.delete("/comments/:id", verifyJWT, async (req, res) => {
-  try {
-    const commentId = req.params.id;
-    if (!ObjectId.isValid(commentId))
-      return res.status(400).send({ message: "Invalid comment ID." });
-
-    const comment = await commentsCollection.findOne({
-      _id: new ObjectId(commentId),
-    });
-    if (!comment)
-      return res.status(404).send({ message: "Comment not found." });
-
-    if (comment.userId !== req.userUid && comment.commentedBy !== req.userUid) {
-      const user = await usersCollection.findOne({ uid: req.userUid });
-      if (!user || user.role !== "admin") {
-        return res
-          .status(403)
-          .send({ message: "Unauthorized to delete this comment." });
-      }
-    }
-
-    await commentsCollection.deleteOne({ _id: new ObjectId(commentId) });
-    return res.send({ message: "Comment deleted." });
-  } catch (error) {
-    console.error("Delete comment failed:", error);
-    res.status(500).send({ message: "Failed to delete comment." });
-  }
-});
-
-// 10. Post Comment
 
 app.post("/comments", verifyJWT, async (req, res) => {
   try {
-    const body = req.body || {};
-    const lessonId = body.lessonId || body.lesson || body.lesson_id;
-    const commentText =
-      body.commentText || body.text || body.comment || body.commentText;
-    const commentedBy =
-      body.commentedBy || body.userId || body.user || req.userUid;
-    const userName =
-      body.userName ||
-      body.userName ||
-      body.userName ||
-      body.userName ||
-      body.userName ||
-      body.userName ||
-      body.userName ||
-      req.userEmail ||
-      "";
-    const userPhoto = body.userPhoto || body.photoURL || "";
-
-    if (!lessonId || !commentText || !commentedBy) {
-      return res.status(400).send({ message: "Invalid comment data." });
-    }
-
-    const newComment = {
-      lessonId,
-      commentText,
-      text: commentText,
-      commentedBy,
-      userId: commentedBy,
-      userName,
-      userPhoto,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
+    const newComment = { ...req.body, createdAt: new Date() };
     const result = await commentsCollection.insertOne(newComment);
-    res.status(201).send({
-      insertedId: result.insertedId,
-      message: "Comment posted.",
-      comment: newComment,
-    });
+    res.status(201).send(result);
   } catch (error) {
-    console.error("Failed to post comment:", error);
-    res.status(500).send({ message: "Failed to post comment." });
+    res.status(500).send({ message: "Failed" });
   }
 });
-
-// 11. Toggle Favourites
-
 
 app.patch("/lessons/:id", verifyJWT, async (req, res) => {
   try {
-    const id = req.params.id;
-    const updatedData = req.body;
-
-    const query = { _id: new ObjectId(id), creatorId: req.userUid };
-
-    const result = await lessonsCollection.updateOne(query, {
-      $set: { ...updatedData, updatedAt: new Date() },
-    });
-
-    if (result.matchedCount === 0) {
-      return res
-        .status(404)
-        .send({ message: "Lesson not found or Unauthorized" });
-    }
-
-    res.send({ success: true, message: "Lesson updated successfully" });
+    const result = await lessonsCollection.updateOne({ _id: new ObjectId(req.params.id), creatorId: req.userUid }, { $set: { ...req.body, updatedAt: new Date() } });
+    res.send(result);
   } catch (error) {
-    res.status(500).send({ message: "Update failed" });
+    res.status(500).send({ message: "Failed" });
   }
 });
 
-app.get("/api/lessons/favorites/:uid", verifyJWT, async (req, res) => {
-  try {
-    const uid = req.params.uid;
-    const favorites = await favouritesCollection
-      .find({ userId: uid })
-      .toArray();
-
-    if (!favorites || favorites.length === 0) return res.send([]);
-
-    const lessonIds = favorites.map((f) => new ObjectId(f.lessonId));
-    const favoriteLessons = await lessonsCollection
-      .find({ _id: { $in: lessonIds } })
-      .toArray();
-
-    res.send(favoriteLessons);
-  } catch (error) {
-    res.status(500).send({ message: "Error fetching favorites" });
-  }
-});
-
-
-
-// --- NEW: User Dashboard Stats API ---
 app.get("/api/users/my-stats", verifyJWT, async (req, res) => {
   try {
-    const uid = req.userUid;
-    const userEmail = req.userEmail;
-
-
-    const totalFavorites = await favouritesCollection.countDocuments({ userId: uid });
-
-
-    const totalLiked = await lessonsCollection.countDocuments({ likedBy: userEmail });
-
-    const totalLessonsTaken = totalFavorites + totalLiked; 
-
-    const vocabLearned = totalLessonsTaken * 5; 
-
-
-    const recentActivity = await favouritesCollection
-      .find({ userId: uid })
-      .sort({ createdAt: -1 })
-      .limit(5)
-      .toArray();
-
-
-    
-
-    const lessonIds = recentActivity.map(item => new ObjectId(item.lessonId));
-    
-
-    const lessonDetails = await lessonsCollection
-      .find({ _id: { $in: lessonIds } })
-      .project({ title: 1, createdAt: 1 })
-      .toArray();
-
-
-    const history = recentActivity.map(item => {
-      const details = lessonDetails.find(l => l._id.toString() === item.lessonId);
-      return {
-        id: item._id,
-        lesson: details?.title || "Unknown Lesson",
-        date: item.createdAt.toISOString().split('T')[0], 
-        status: "Completed", 
-        score: "10/10"       
-      };
-    });
-
-
-    res.send({
-      totalLessonsTaken,
-      vocabLearned,
-      tutorialsCompleted: 0,
-      recentHistory: history 
-    });
-
+    const totalFavorites = await favouritesCollection.countDocuments({ userId: req.userUid });
+    res.send({ totalLessonsTaken: totalFavorites, vocabLearned: totalFavorites * 5 });
   } catch (error) {
-    console.error("User Stats Error:", error);
-    res.status(500).send({ message: "Failed to fetch user stats" });
+    res.status(500).send({ message: "Failed" });
   }
 });
-
-
-// --- NEW: User Activity Graph API ---
-app.get("/api/users/activity-graph", verifyJWT, async (req, res) => {
-  try {
-    const uid = req.userUid;
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-
-    const activity = await favouritesCollection.aggregate([
-      { 
-        $match: { 
-          userId: uid, 
-          createdAt: { $gte: sevenDaysAgo } 
-        } 
-      },
-      {
-        $group: {
-          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
-          count: { $sum: 1 }
-        }
-      },
-      { $sort: { _id: 1 } }
-    ]).toArray();
-
-
-    const labels = [];
-    const data = [];
-    
-
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().split('T')[0];
-      const found = activity.find(a => a._id === dateStr);
-      
-      labels.push(dateStr); 
-      data.push(found ? found.count : 0); 
-    }
-
-    res.send({ labels, data });
-
-  } catch (error) {
-    console.error("Activity Graph Error:", error);
-    res.status(500).send({ message: "Failed to fetch activity graph" });
-  }
-});
-
-
-
-
-
-// ২. Manage Users
 
 app.get("/users/all", verifyJWT, verifyAdmin, async (req, res) => {
-  try {
-    const users = await usersCollection.find().toArray();
-    res.send(users);
-  } catch (error) {
-    res.status(500).send({ message: "Failed to fetch users" });
-  }
+  const users = await usersCollection.find().toArray();
+  res.send(users);
 });
-
-// ৩. Manage Users
-
-
-app.patch("/users/role/:id", verifyJWT, verifyAdmin, async (req, res) => {
-  const id = req.params.id;
-  const { role } = req.body;
-  try {
-    const result = await usersCollection.updateOne(
-      { _id: new ObjectId(id) },
-      { $set: { role: role } }
-    );
-    res.send(result);
-  } catch (error) {
-    res.status(500).send({ message: "Failed to update role" });
-  }
-});
-
-app.patch("/users/admin/:id", verifyJWT, verifyAdmin, async (req, res) => {
-  const id = req.params.id;
-  try {
-    const result = await usersCollection.updateOne(
-      { _id: new ObjectId(id) },
-      { $set: { role: "admin" } }
-    );
-    res.send(result);
-  } catch (error) {
-    res.status(500).send({ message: "Failed to promote user" });
-  }
-});
-
-// ৪. Manage Users: Delete User
 
 app.delete("/users/:id", verifyJWT, verifyAdmin, async (req, res) => {
-  const id = req.params.id;
-  try {
-    await usersCollection.deleteOne({ _id: new ObjectId(id) });
-    res.send({ success: true, message: "User deleted successfully" });
-  } catch (error) {
-    res.status(500).send({ message: "Failed to delete user" });
-  }
+  await usersCollection.deleteOne({ _id: new ObjectId(req.params.id) });
+  res.send({ success: true });
 });
-
-// ৫. Admin Lessons
-
-app.get("/admin/lessons", verifyJWT, verifyAdmin, async (req, res) => {
-  try {
-    const status = req.query.status;
-    let query = {};
-    if (status === "pending") {
-      query = { isReviewed: false };
-    } else if (status === "reported") {
-      query = { reportedCount: { $gt: 0 } };
-    }
-    const lessons = await lessonsCollection
-      .find(query)
-      .sort({ createdAt: -1 })
-      .toArray();
-    res.send(lessons);
-  } catch (error) {
-    res.status(500).send({ message: "Failed to fetch admin lessons" });
-  }
-});
-
-// ৬. Admin: Approve Lesson
-
-app.patch(
-  "/admin/lessons/approve/:id",
-  verifyJWT,
-  verifyAdmin,
-  async (req, res) => {
-    try {
-      const lessonId = req.params.id;
-      await lessonsCollection.updateOne(
-        { _id: new ObjectId(lessonId) },
-        { $set: { isReviewed: true } }
-      );
-      res.send({ message: "Lesson approved and published." });
-    } catch (error) {
-      res.status(500).send({ message: "Failed to approve lesson." });
-    }
-  }
-);
-
-// ৭. Admin: Toggle Featured
-
-app.patch(
-  "/admin/lessons/featured/:id",
-  verifyJWT,
-  verifyAdmin,
-  async (req, res) => {
-    try {
-      const id = req.params.id;
-      const { isFeatured } = req.body;
-      const result = await lessonsCollection.updateOne(
-        { _id: new ObjectId(id) },
-        { $set: { isFeatured: isFeatured, isReviewed: true } }
-      );
-      if (result.matchedCount === 0) {
-        return res
-          .status(404)
-          .send({ success: false, message: "Lesson not found!" });
-      }
-      res.send({
-        success: true,
-        message: isFeatured
-          ? "Lesson marked as Featured ✨"
-          : "Featured status removed.",
-      });
-    } catch (error) {
-      res
-        .status(500)
-        .send({ success: false, message: "Internal Server Error" });
-    }
-  }
-);
-
-// ৮. Admin: Resolve Report
-
-app.patch(
-  "/admin/lessons/resolve-report/:id",
-  verifyJWT,
-  verifyAdmin,
-  async (req, res) => {
-    try {
-      const id = req.params.id;
-      await lessonsCollection.updateOne(
-        { _id: new ObjectId(id) },
-        { $set: { reportedCount: 0, isReviewed: true } }
-      );
-      await lessonsReportsCollection.deleteMany({ lessonId: id });
-      res.send({ success: true, message: "Reports resolved." });
-    } catch (error) {
-      res
-        .status(500)
-        .send({ success: false, message: "Failed to resolve reports." });
-    }
-  }
-);
-
-// ৯. Admin: Permanent Delete Lesson
-
-app.delete("/admin/lessons/:id", verifyJWT, verifyAdmin, async (req, res) => {
-  const id = req.params.id;
-  try {
-    await lessonsCollection.deleteOne({ _id: new ObjectId(id) });
-    await lessonsReportsCollection.deleteMany({ lessonId: id });
-    res.send({ success: true, message: "Lesson permanently deleted." });
-  } catch (error) {
-    res.status(500).send({ message: "Failed to delete lesson." });
-  }
-});
-
-// ১. Like/Unlike Toggle API
 
 app.post("/lessons/:id/like", verifyJWT, async (req, res) => {
-  try {
-    const lessonId = req.params.id;
-    const userEmail = req.userEmail;
-
-    if (!ObjectId.isValid(lessonId)) {
-      return res.status(400).send({ message: "Invalid Lesson ID" });
-    }
-
-    const query = { _id: new ObjectId(lessonId) };
-    const lesson = await lessonsCollection.findOne(query);
-
-    if (!lesson) {
-      return res.status(404).send({ message: "Lesson not found" });
-    }
-
-  
-    const likedBy = lesson.likedBy || [];
-    const hasLiked = likedBy.includes(userEmail);
-
-    let updateDoc;
-    if (hasLiked) {
-      updateDoc = {
-        $pull: { likedBy: userEmail },
-        $inc: { likesCount: -1 },
-      };
-    } else {
-      updateDoc = {
-        $addToSet: { likedBy: userEmail },
-        $inc: { likesCount: 1 },
-      };
-    }
-
-    await lessonsCollection.updateOne(query, updateDoc);
-
-    const updatedLesson = await lessonsCollection.findOne(query);
-
-    res.send({
-      success: true,
-      isLiked: !hasLiked,
-      currentLikes: updatedLesson.likesCount || 0,
-    });
-  } catch (error) {
-    console.error("Like Error:", error);
-    res.status(500).send({ message: "Internal Server Error" });
-  }
+  const lessonId = req.params.id;
+  const userEmail = req.userEmail;
+  const lesson = await lessonsCollection.findOne({ _id: new ObjectId(lessonId) });
+  const hasLiked = (lesson.likedBy || []).includes(userEmail);
+  const update = hasLiked ? { $pull: { likedBy: userEmail }, $inc: { likesCount: -1 } } : { $addToSet: { likedBy: userEmail }, $inc: { likesCount: 1 } };
+  await lessonsCollection.updateOne({ _id: new ObjectId(lessonId) }, update);
+  res.send({ success: true, isLiked: !hasLiked });
 });
 
-// ২. Report Lesson API
+// Listener & Roots
+app.get("/", (req, res) => res.send("✅ Digital Life Lessons Full API Running"));
 
-app.post("/lessons/:id/report", verifyJWT, async (req, res) => {
-  try {
-    const lessonId = req.params.id;
-    const { reportReason, reporterEmail } = req.body;
-
-    await lessonsCollection.updateOne(
-      { _id: new ObjectId(lessonId) },
-      { $inc: { reportedCount: 1 } }
-    );
-
-    const reportDoc = {
-      lessonId: lessonId,
-      reporterEmail,
-      reportReason,
-      createdAt: new Date(),
-    };
-
-    await lessonsReportsCollection.insertOne(reportDoc);
-
-    res.send({ success: true, message: "Report submitted successfully." });
-  } catch (error) {
-    res.status(500).send({ message: "Reporting failed." });
-  }
-});
-
-// --- Admin Stats Section (Dashboard) ---
-
-app.get("/admin/total-users", verifyJWT, verifyAdmin, async (req, res) => {
-  const total = await usersCollection.estimatedDocumentCount();
-  res.send({ total });
-});
-
-app.get("/admin/total-lessons", verifyJWT, verifyAdmin, async (req, res) => {
-  const total = await lessonsCollection.countDocuments();
-  res.send({ total });
-});
-
-app.get(
-  "/admin/reported-lessons-count",
-  verifyJWT,
-  verifyAdmin,
-  async (req, res) => {
-    const total = await lessonsCollection.countDocuments({
-      reportedCount: { $gt: 0 },
-    });
-    res.send({ total });
-  }
-);
-
-app.get(
-  "/admin/most-active-contributors",
-  verifyJWT,
-  verifyAdmin,
-  async (req, res) => {
-    const result = await lessonsCollection
-      .aggregate([
-        { $group: { _id: "$creatorEmail", lessonsCreated: { $sum: 1 } } },
-        { $sort: { lessonsCreated: -1 } },
-        { $limit: 5 },
-        { $project: { name: "$_id", lessonsCreated: 1, _id: 0 } },
-      ])
-      .toArray();
-    res.send(result);
-  }
-);
-
-app.get("/admin/todays-lessons", verifyJWT, verifyAdmin, async (req, res) => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const total = await lessonsCollection.countDocuments({
-    createdAt: { $gte: today },
-  });
-  res.send({ total });
-});
-
-// --- User Section ---
-
-app.get("/lessons/my-lessons/:uid", verifyJWT, async (req, res) => {
-  try {
-    const uid = req.params.uid;
-    const userLessons = await lessonsCollection
-      .find({
-        creatorId: uid,
-        isDeletedByUser: { $ne: true },
-      })
-      .sort({ createdAt: -1 })
-      .toArray();
-    res.send(userLessons);
-  } catch (error) {
-    res.status(500).send({ message: "Failed to fetch user lessons." });
-  }
-});
-
-
-// --- Lesson Delete (Soft Delete) Route ---
-
-app.patch("/lessons/delete-my-lesson/:id", async (req, res) => {
-  try {
-    const id = req.params.id;
- 
-    const query = { _id: new ObjectId(id) };
-
-    const updateDoc = {
-      $set: {
-        isDeletedByUser: true,
-        status: "deleted"
-      },
-    };
-
-    const result = await lessonsCollection.updateOne(query, updateDoc);
-
-    if (result.matchedCount === 0) {
-      return res.status(404).send({ message: "Lesson not found!" });
-    }
-
-    res.send({ success: true, message: "Lesson deleted successfully" });
-  } catch (error) {
-    console.error("Delete Error:", error);
-    res.status(500).send({ message: "Internal Server Error" });
-  }
-});
-
-
-// --- Listener & Roots ---
-
-app.get("/", (req, res) =>
-  res.send("✅ Digital Life Lessons Full API Running")
-);
 module.exports = app; 
 
 if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => {
-    console.log(`✅ Server running on port ${PORT}`);
+  connectDB().then(() => {
+    app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
   });
 }
