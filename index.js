@@ -352,7 +352,7 @@ app.post("/lessons", verifyJWT, async (req, res) => {
   }
 });
 
-// --- NEWLY ADDED ROUTE FOR MY LESSONS ---
+// --- ROUTE FOR MY LESSONS ---
 app.get("/lessons/my-lessons/:uid", verifyJWT, async (req, res) => {
   try {
     const uid = req.params.uid;
@@ -375,6 +375,37 @@ app.patch("/lessons/delete-my-lesson/:id", verifyJWT, async (req, res) => {
     res.status(500).send({ message: "Failed to delete lesson" });
   }
 });
+
+// --- ADMIN SPECIFIC ROUTES (FEATURE & DELETE) ---
+
+// 1. ADMIN DELETE (Fix for 'delete button not working')
+app.delete("/lessons/:id", verifyJWT, verifyAdmin, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const query = { _id: new ObjectId(id) };
+    const result = await lessonsCollection.deleteOne(query);
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({ message: "Failed to delete lesson" });
+  }
+});
+
+// 2. ADMIN FEATURE TOGGLE (Fix for 'Failed to update featured status')
+app.put("/lessons/:id/feature", verifyJWT, verifyAdmin, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const filter = { _id: new ObjectId(id) };
+    const updateDoc = {
+      $set: { ...req.body } 
+    };
+    const result = await lessonsCollection.updateOne(filter, updateDoc);
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({ message: "Failed to feature lesson" });
+  }
+});
+
+// ------------------------------------------------
 
 app.get("/lessons/:id", async (req, res) => {
   try {
@@ -420,13 +451,22 @@ app.post("/comments", verifyJWT, async (req, res) => {
   }
 });
 
+// --- GENERAL UPDATE LESSON (User Only) ---
+app.patch("/lessons/:id", verifyJWT, async (req, res) => {
+  try {
+    // Note: Only updates if creatorId matches
+    const result = await lessonsCollection.updateOne({ _id: new ObjectId(req.params.id), creatorId: req.userUid }, { $set: { ...req.body, updatedAt: new Date() } });
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({ message: "Failed" });
+  }
+});
 
-// --- GET FAVOURITE LESSONS ROUTE ---
 app.get("/api/lessons/favorites/:uid", verifyJWT, async (req, res) => {
   try {
     const uid = req.params.uid;
     const favorites = await favouritesCollection.find({ userId: uid }).toArray();
-   
+    
     if (!favorites || favorites.length === 0) {
       return res.send([]);
     }
@@ -438,15 +478,6 @@ app.get("/api/lessons/favorites/:uid", verifyJWT, async (req, res) => {
   } catch (error) {
     console.error("Error fetching favorites:", error);
     res.status(500).send({ message: "Failed to fetch favorite lessons" });
-  }
-});
-
-app.patch("/lessons/:id", verifyJWT, async (req, res) => {
-  try {
-    const result = await lessonsCollection.updateOne({ _id: new ObjectId(req.params.id), creatorId: req.userUid }, { $set: { ...req.body, updatedAt: new Date() } });
-    res.send(result);
-  } catch (error) {
-    res.status(500).send({ message: "Failed" });
   }
 });
 
@@ -470,26 +501,12 @@ app.delete("/users/:id", verifyJWT, verifyAdmin, async (req, res) => {
   res.send({ success: true });
 });
 
-// --- ADMIN GET ALL LESSONS ROUTE ---
 app.get("/admin/lessons", verifyJWT, verifyAdmin, async (req, res) => {
   try {
     const lessons = await lessonsCollection.find().toArray();
     res.send(lessons);
   } catch (error) {
     res.status(500).send({ message: "Failed to fetch all lessons" });
-  }
-});
-
-
-// --- ADMIN DELETE LESSON ROUTE ---
-app.delete("/lessons/:id", verifyJWT, verifyAdmin, async (req, res) => {
-  try {
-    const id = req.params.id;
-    const query = { _id: new ObjectId(id) };
-    const result = await lessonsCollection.deleteOne(query);
-    res.send(result);
-  } catch (error) {
-    res.status(500).send({ message: "Failed to delete lesson" });
   }
 });
 
