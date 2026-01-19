@@ -209,6 +209,14 @@ const verifyAdmin = async (req, res, next) => {
   if (!email) return res.status(401).send({ message: "Unauthorized: Email not found" });
   try {
     const user = await usersCollection.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } });
+    
+    // --- FIX START: CRASH PREVENTED HERE ---
+    if (!user) {
+        // If user is not in DB, deny access immediately
+        return res.status(403).send({ message: "Forbidden: User not found" });
+    }
+    // --- FIX END ---
+
     const isAdmin = (user && user.role === "admin") || email.toLowerCase() === masterAdminEmail.toLowerCase();
     if (!isAdmin) return res.status(403).send({ message: "Forbidden Access" });
     next();
@@ -218,53 +226,6 @@ const verifyAdmin = async (req, res, next) => {
 };
 
 // --- ROUTES ---
-
-// ==========================================
-// 🔥 ADMIN FIXED ROUTES (RESOLVED & DELETE) 🔥
-// ==========================================
-
-// 1. RESOLVE REPORT (Fix for Resolved Button)
-app.delete("/admin/reports/:id", verifyJWT, verifyAdmin, async (req, res) => {
-  try {
-    const id = req.params.id;
-    // Database check to delete report
-    const result = await lessonsReportsCollection.deleteOne({ _id: new ObjectId(id) });
-    console.log("Deleted Report ID:", id); 
-    res.send(result);
-  } catch (error) {
-    console.error("Error resolving report:", error);
-    res.status(500).send({ message: "Failed to resolve report" });
-  }
-});
-
-// 2. ADMIN DELETE LESSON (Fix for Delete Button)
-app.delete("/admin/lessons/:id", verifyJWT, verifyAdmin, async (req, res) => {
-  try {
-    const id = req.params.id;
-    // Database check to delete lesson
-    const result = await lessonsCollection.deleteOne({ _id: new ObjectId(id) });
-    console.log("Deleted Lesson ID:", id);
-    res.send(result);
-  } catch (error) {
-    console.error("Error deleting lesson:", error);
-    res.status(500).send({ message: "Failed to delete lesson" });
-  }
-});
-
-// 3. ADMIN FEATURE TOGGLE
-app.patch("/admin/lessons/featured/:id", verifyJWT, verifyAdmin, async (req, res) => {
-  try {
-    const id = req.params.id;
-    const filter = { _id: new ObjectId(id) };
-    const updateDoc = { $set: { ...req.body } };
-    const result = await lessonsCollection.updateOne(filter, updateDoc);
-    res.send(result);
-  } catch (error) {
-    res.status(500).send({ message: "Failed to feature lesson" });
-  }
-});
-
-// ==========================================
 
 app.get("/users/status", verifyJWT, async (req, res) => {
   try {
@@ -414,7 +375,12 @@ app.patch("/lessons/delete-my-lesson/:id", verifyJWT, async (req, res) => {
   }
 });
 
-// ADD REPORT 
+
+// ============================================
+// --- FIXED REPORTS & ADMIN DELETE SECTION ---
+// ============================================
+
+// 1. ADD REPORT 
 app.post("/lessons/report", verifyJWT, async (req, res) => {
   try {
     const report = req.body;
@@ -425,7 +391,7 @@ app.post("/lessons/report", verifyJWT, async (req, res) => {
   }
 });
 
-// GET ALL REPORTS 
+// 2. GET ALL REPORTS 
 app.get("/admin/reports", verifyJWT, verifyAdmin, async (req, res) => {
   try {
     const reports = await lessonsReportsCollection.find().toArray();
@@ -434,6 +400,68 @@ app.get("/admin/reports", verifyJWT, verifyAdmin, async (req, res) => {
     res.status(500).send({ message: "Failed to fetch reports" });
   }
 });
+
+// 3. RESOLVE REPORT (Fixed & Secured)
+app.delete("/admin/reports/:id", verifyJWT, verifyAdmin, async (req, res) => {
+  try {
+    const id = req.params.id;
+    if (!ObjectId.isValid(id)) return res.status(400).send({ message: "Invalid ID" });
+
+    const result = await lessonsReportsCollection.deleteOne({ _id: new ObjectId(id) });
+    console.log("✅ Report Resolved:", id);
+    res.status(200).send({ success: true, result });
+  } catch (error) {
+    console.error("❌ Failed to resolve report:", error);
+    res.status(500).send({ message: "Failed to resolve report" });
+  }
+});
+
+// 4. ADMIN DELETE LESSON (Fixed & Secured)
+app.delete("/admin/lessons/:id", verifyJWT, verifyAdmin, async (req, res) => {
+  try {
+    const id = req.params.id;
+    if (!ObjectId.isValid(id)) return res.status(400).send({ message: "Invalid ID" });
+
+    const query = { _id: new ObjectId(id) };
+    const result = await lessonsCollection.deleteOne(query);
+    console.log("✅ Admin Deleted Lesson:", id); 
+    res.status(200).send({ success: true, result });
+  } catch (error) {
+    console.error("❌ Admin Delete Error:", error);
+    res.status(500).send({ message: "Failed to delete lesson" });
+  }
+});
+
+// 5. ADMIN FEATURE LESSON
+app.patch("/admin/lessons/featured/:id", verifyJWT, verifyAdmin, async (req, res) => {
+  try {
+    const id = req.params.id;
+    if (!ObjectId.isValid(id)) return res.status(400).send({ message: "Invalid ID" });
+
+    const filter = { _id: new ObjectId(id) };
+    const updateDoc = {
+      $set: { ...req.body } 
+    };
+    const result = await lessonsCollection.updateOne(filter, updateDoc);
+    res.send(result);
+  } catch (error) {
+     console.error("❌ Admin Feature Error:", error);
+    res.status(500).send({ message: "Failed to feature lesson" });
+  }
+});
+
+// Fallback Route for direct deletions
+app.delete("/lessons/:id", verifyJWT, verifyAdmin, async (req, res) => {
+    try {
+      if (!ObjectId.isValid(req.params.id)) return res.status(400).send({ message: "Invalid ID" });
+      const result = await lessonsCollection.deleteOne({ _id: new ObjectId(req.params.id) });
+      res.send(result);
+    } catch (err) {
+      res.status(500).send({ message: "Delete failed" });
+    }
+});
+
+// ============================================
 
 app.get("/lessons/:id", async (req, res) => {
   try {
