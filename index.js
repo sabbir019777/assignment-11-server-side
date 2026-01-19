@@ -470,6 +470,17 @@ app.delete("/users/:id", verifyJWT, verifyAdmin, async (req, res) => {
   res.send({ success: true });
 });
 
+// --- ADMIN GET ALL LESSONS ROUTE ---
+app.get("/admin/lessons", verifyJWT, verifyAdmin, async (req, res) => {
+  try {
+    const lessons = await lessonsCollection.find().toArray();
+    res.send(lessons);
+  } catch (error) {
+    res.status(500).send({ message: "Failed to fetch all lessons" });
+  }
+});
+
+
 app.post("/lessons/:id/like", verifyJWT, async (req, res) => {
   const lessonId = req.params.id;
   const userEmail = req.userEmail;
