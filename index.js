@@ -433,16 +433,28 @@ app.patch("/lessons/delete-my-lesson/:id", verifyJWT, async (req, res) => {
   }
 });
 
-// ADD REPORT 
-app.post("/lessons/report", verifyJWT, async (req, res) => {
+// ============================================
+// 🔥 FIXED: ADD REPORT ROUTE 🔥
+// ============================================
+app.post("/lessons/:id/report", verifyJWT, async (req, res) => {
   try {
+    const lessonId = req.params.id; // URL থেকে ID নেওয়া হলো
     const report = req.body;
-    const result = await lessonsReportsCollection.insertOne({ ...report, createdAt: new Date() });
+    
+    // ডাটাবেসে সেভ করার সময় lessonId এবং রিপোর্ট ডাটা একসাথে রাখা হচ্ছে
+    const result = await lessonsReportsCollection.insertOne({ 
+        ...report, 
+        lessonId: lessonId, 
+        createdAt: new Date() 
+    });
+    
     res.send(result);
   } catch (error) {
+    console.error("Report Error:", error);
     res.status(500).send({ message: "Failed to submit report" });
   }
 });
+// ============================================
 
 app.get("/lessons/:id", async (req, res) => {
   try {
