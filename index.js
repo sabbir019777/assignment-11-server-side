@@ -420,6 +420,27 @@ app.post("/comments", verifyJWT, async (req, res) => {
   }
 });
 
+
+// --- GET FAVOURITE LESSONS ROUTE ---
+app.get("/api/lessons/favorites/:uid", verifyJWT, async (req, res) => {
+  try {
+    const uid = req.params.uid;
+    const favorites = await favouritesCollection.find({ userId: uid }).toArray();
+   
+    if (!favorites || favorites.length === 0) {
+      return res.send([]);
+    }
+    const lessonIds = favorites.map(fav => new ObjectId(fav.lessonId));
+
+    const favoriteLessons = await lessonsCollection.find({ _id: { $in: lessonIds } }).toArray();
+    
+    res.send(favoriteLessons);
+  } catch (error) {
+    console.error("Error fetching favorites:", error);
+    res.status(500).send({ message: "Failed to fetch favorite lessons" });
+  }
+});
+
 app.patch("/lessons/:id", verifyJWT, async (req, res) => {
   try {
     const result = await lessonsCollection.updateOne({ _id: new ObjectId(req.params.id), creatorId: req.userUid }, { $set: { ...req.body, updatedAt: new Date() } });
