@@ -1,4 +1,3 @@
-// index.js (বা server.js)
 const express = require("express");
 const jwt = require("jsonwebtoken");
 const cors = require("cors");
@@ -10,7 +9,6 @@ require("dotenv").config();
 const multer = require("multer");
 const path = require("path");
 const axios = require("axios");
-
 
 const PORT = process.env.PORT || 5000;
 const CLIENT_URL = process.env.VITE_APP_CLIENT_URL || "http://localhost:5173";
@@ -53,7 +51,6 @@ app.use(cors(corsOptions));
 const uploadsDir = path.join(__dirname, "uploads");
 app.use("/uploads", express.static(uploadsDir));
 
-// upload/image
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
@@ -364,7 +361,7 @@ app.get("/lessons/my-lessons/:uid", verifyJWT, async (req, res) => {
   }
 });
 
-// --- DELETE LESSON ROUTE (Frontend sends PATCH request) ---
+// --- DELETE LESSON ROUTE (User: Patch Method) ---
 app.patch("/lessons/delete-my-lesson/:id", verifyJWT, async (req, res) => {
   try {
     const id = req.params.id;
@@ -376,9 +373,11 @@ app.patch("/lessons/delete-my-lesson/:id", verifyJWT, async (req, res) => {
   }
 });
 
-// --- ADMIN SPECIFIC ROUTES (FEATURE & DELETE) ---
 
-// 1. ADMIN DELETE (Fix for 'delete button not working')
+// --- FIXED ADMIN ROUTES (Delete & Feature) ---
+
+
+// 1. ADMIN DELETE (Direct Delete Method)
 app.delete("/lessons/:id", verifyJWT, verifyAdmin, async (req, res) => {
   try {
     const id = req.params.id;
@@ -390,11 +389,12 @@ app.delete("/lessons/:id", verifyJWT, verifyAdmin, async (req, res) => {
   }
 });
 
-// 2. ADMIN FEATURE TOGGLE (Fix for 'Failed to update featured status')
-app.put("/lessons/:id/feature", verifyJWT, verifyAdmin, async (req, res) => {
+
+app.patch("/lessons/:id/feature", verifyJWT, verifyAdmin, async (req, res) => {
   try {
     const id = req.params.id;
     const filter = { _id: new ObjectId(id) };
+  
     const updateDoc = {
       $set: { ...req.body } 
     };
@@ -405,7 +405,20 @@ app.put("/lessons/:id/feature", verifyJWT, verifyAdmin, async (req, res) => {
   }
 });
 
-// ------------------------------------------------
+// Also keeping PUT just in case frontend calls PUT
+app.put("/lessons/:id/feature", verifyJWT, verifyAdmin, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const filter = { _id: new ObjectId(id) };
+    const updateDoc = { $set: { ...req.body } };
+    const result = await lessonsCollection.updateOne(filter, updateDoc);
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({ message: "Failed to feature lesson" });
+  }
+});
+
+
 
 app.get("/lessons/:id", async (req, res) => {
   try {
@@ -451,11 +464,25 @@ app.post("/comments", verifyJWT, async (req, res) => {
   }
 });
 
-// --- GENERAL UPDATE LESSON (User Only) ---
+// --- SUPER FIX: GENERAL UPDATE LESSON 
 app.patch("/lessons/:id", verifyJWT, async (req, res) => {
   try {
-    // Note: Only updates if creatorId matches
-    const result = await lessonsCollection.updateOne({ _id: new ObjectId(req.params.id), creatorId: req.userUid }, { $set: { ...req.body, updatedAt: new Date() } });
+    const id = req.params.id;
+    const filter = { _id: new ObjectId(id) };
+
+    const requester = await usersCollection.findOne({ uid: req.userUid });
+
+    if (requester?.role !== 'admin') {
+       filter.creatorId = req.userUid;
+    }
+   
+
+    const result = await lessonsCollection.updateOne(filter, { $set: { ...req.body, updatedAt: new Date() } });
+    
+    if (result.matchedCount === 0) {
+      return res.status(403).send({ message: "Unauthorized or Lesson not found" });
+    }
+    
     res.send(result);
   } catch (error) {
     res.status(500).send({ message: "Failed" });
